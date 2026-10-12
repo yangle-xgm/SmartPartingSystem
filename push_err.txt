@@ -1,1 +1,0 @@
-fatal: unable to access 'https://github.com/yangle-xgm/SmartPartingSystem.git/': CONNECT tunnel failed, response 502
