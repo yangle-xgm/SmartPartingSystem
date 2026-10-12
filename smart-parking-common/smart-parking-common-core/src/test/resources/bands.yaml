@@ -1,0 +1,90 @@
+# bands.yaml — 核心业务指标可接受区间（维护阶段工件，测试副本）
+# 与仓库根 bands.yaml 保持一致；改动请以根文件为准。
+# action: open_incident=告警工单；page_oncall=呼叫值守；write_intent=true 时自动写需求文件
+
+# ---------- 网关 / 入口 ----------
+- metric: gateway_p99_latency_ms
+  service: smart-parking-gateway
+  band: [0, 800]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: gateway_error_rate_pct
+  service: smart-parking-gateway
+  band: [0, 1.0]
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 订单 ----------
+- metric: order_entry_p99_ms
+  service: smart-parking-order
+  band: [0, 200]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: order_create_error_rate_pct
+  service: smart-parking-order
+  band: [0, 0.5]
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 支付 ----------
+- metric: payment_callback_p99_ms
+  service: smart-parking-payment
+  band: [0, 1000]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: payment_recon_diff_amount
+  service: smart-parking-payment
+  band: [0, 0]
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 车位状态缓存一致性 ----------
+- metric: space_cache_miss_rate_pct
+  service: smart-parking-parking
+  band: [0, 20]
+  on_breach:
+    severity: medium
+    action: open_incident
+    write_intent: false
+
+# ---------- 消息队列积压 ----------
+- metric: mq_order_backlog
+  service: rabbitmq
+  band: [0, 500]
+  on_breach:
+    severity: high
+    action: page_oncall
+    write_intent: true
+
+# ---------- 设备在线率 ----------
+- metric: device_offline_rate_pct
+  service: smart-parking-device
+  band: [0, 2.0]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+# ---------- 数据库可用连接 ----------
+- metric: mysql_active_connections
+  service: smart_parking
+  band: [0, 80]
+  on_breach:
+    severity: high
+    action: page_oncall
+    write_intent: false

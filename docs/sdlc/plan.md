@@ -24,7 +24,7 @@
 
 ---
 
-## Phase B — 补齐单元测试（P1）
+## Phase B — 补齐单元测试（P1） ✅ 已完成
 
 **Files to change, in order**
 1. `scripts/run-tests.sh`：统一测试入口（CI 与本地钩子共用）。
@@ -66,6 +66,8 @@
 **Tests that must pass**：可用单测验证 band 解析与“越界→生成 intent”逻辑。
 
 **Rollback**：停止采集任务即停闭环。
+
+**已落地（2026-10-12）**：`common-core` 新增 `monitor/Band.java`、`BandEvaluator.java`（evaluate + generateIntent）、`BandsLoader.java`（Hutool 解析 bands.yaml）；`BandEvaluatorTest` 覆盖区间判定、越界结果、intent 生成与 YAML 加载。集成侧（定时采集 + 指标源接入）作为后续 Follow-up。
 
 ---
 

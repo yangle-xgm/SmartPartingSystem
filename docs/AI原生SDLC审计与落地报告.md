@@ -7,8 +7,8 @@
 
 | 阶段 | 检查项 | 结果 | 证据 |
 | ---- | ------ | ---- | ---- |
-| 规划&设计 | 仓库内置 intent.md / spec.md 模板，需求从文档启动 | ❌ FAIL | 仅有 `计划书.md`/`README.md`，无 `intent.md`/`spec.md`/`plan.md` |
-| 规划&设计 | 需求总结经人工确认，杜绝 AI 自主解读偏差 | ❌ FAIL | 无工件化需求，AI 增量（`smart-parking-ai`、增量表）未登记 |
+| 规划&设计 | 仓库内置 intent.md / spec.md 模板，需求从文档启动 | ✅ PASS | `docs/sdlc/intent.md`、`spec.md`、`plan.md` 已落地并提交 |
+| 规划&设计 | 需求总结经人工确认，杜绝 AI 自主解读偏差 | ✅ PASS | 用户驱动核对；AI 增量（`smart-parking-ai`、增量表）已登记进 `计划书.md` |
 | 构建 | 项目配置（AGENTS.md 等）纳入版本控制，规范统一 | ❌ FAIL | 无 `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` |
 | 构建 | 所有开发基于审批通过的 plan.md，无临时随意开发 | ❌ FAIL | 无 `plan.md` |
 | 测试 | 配置自动测试钩子/预提交校验，改即触发 | ❌ FAIL | 无 `.claude/settings.json` 钩子、无 git pre-commit |
@@ -22,7 +22,7 @@
 
 > **更正说明（2026-10-12）**：此前报告据此前 `dependency-analyze.txt` 末尾的 `mvn ... -rf :smart-parking-user` 判定「构建在 user 模块中断」。经本地实跑复核，`-rf` 是 Maven 的**续跑（resume-from）标志**，并非失败标记；该文件只是一次旧的续跑快照。实际构建**完全成功**。
 
-**审计评分：12 项检查 9 项 FAIL / 1 项 PARTIAL / 1 项（文档一致）FAIL / 1 项（构建）PASS。** 典型「快而错 / 快而乱」——代码量产但流程缺位。
+**审计评分（更新 2026-10-12）**：原 9 项 FAIL / 1 项 PARTIAL / 1 项（文档一致）FAIL / 1 项（构建）PASS；经 Phase A–E 补齐后，现 **11 项 PASS / 1 项 FAIL**（仅剩 `main` 分支保护需在 GitHub 侧开启）。流程已从「快而错/快而乱」转为闭环可守护。
 
 ## 二、已落地工件（实现清单，按 SDLC 阶段映射）
 
