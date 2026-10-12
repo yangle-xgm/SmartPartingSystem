@@ -1,0 +1,30 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: smart-parking-ai
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8849
+        namespace: smart-parking
+        group: DEFAULT_GROUP
+      config:
+        server-addr: 127.0.0.1:8849
+        namespace: smart-parking
+        group: DEFAULT_GROUP
+        file-extension: yml
+
+# AI 配置（不填则走模拟模式）
+ai:
+  # 车牌识别：baidu / mock
+  plate:
+    provider: mock
+    baidu-api-key: ""
+    baidu-secret-key: ""
+  # 智能客服：doubao / mock
+  chat:
+    provider: mock
+    doubao-api-key: ""
+    doubao-model: "doubao-pro-4k"

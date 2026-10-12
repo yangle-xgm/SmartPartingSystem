@@ -1,0 +1,41 @@
+# ===== Maven / Java 构建产物 =====
+target/
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+!**/src/**/*.jar
+
+# ===== 前端依赖与构建产物（web / h5 等） =====
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.output/
+.cache/
+
+# ===== IDE / 工具 =====
+.idea/
+.mimocode/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ===== 日志 / 临时 =====
+*.log
+**/*.log
+*.tmp
+dumpstreams/
+**/*.dumpstream
+
+# ===== 智能体工作区（内部数据，不进版本库） =====
+.workbuddy/
+
+# ===== 解包文档（由 docx 解出的中间文件，可重建） =====
+unpacked_doc/
+unpacked_template/
+
+# ===== 本地设备服务临时目录 =====
+smart-parking-device-service-*/

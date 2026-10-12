@@ -1,0 +1,73 @@
+name: AI-Native SDLC Review
+
+# 工件来源：AI 原生 SDLC「部署阶段」——分层智能审查（自动化兜底 + 人工把关高危）。
+# 对应文章工具组合：Claude Code Review（高质量）/ Codex（轻量P0-P1）/ Gemini（五维）。
+# 默认仅跑 build+test 门禁（无需密钥即可生效）；AI 审查在开启 vars.ENABLE_AI_REVIEW 后启用。
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ---------- 构建 + 测试门禁（永远生效，是阻断“快而错”的第一道闸） ----------
+  build:
+    name: Build & Test Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build all modules (skip tests for speed)
+        run: mvn -B clean install -DskipTests
+
+      - name: Run tests (allow modules without tests)
+        run: mvn -B test -DfailIfNoTests=false
+
+  # ---------- 分层 AI 审查（可选，默认关闭，避免缺密钥导致红） ----------
+  review:
+    name: Layered AI Review
+    needs: build
+    if: ${{ vars.ENABLE_AI_REVIEW == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Claude Code Review (高质量、强推理；对应文章主推)
+        uses: anthropics/claude-code-action@beta
+        with:
+          mode: review
+          # 审查时对照 docs/sdlc/spec.md、plan.md 与 AGENTS.md 契约
+          prompt: |
+            对照仓库根 AGENTS.md 与 docs/sdlc/ 下的 spec.md、plan.md、bands.yaml，
+            对本次 PR 做五维审查：正确性 / 效率 / 可维护性 / 安全性 / 综合能力。
+            重点核查：跨服务是否仅经 /internal/** 访问、敏感字段是否 AES+脱敏、是否破坏 Spring 三方版本约束、
+            是否新增测试。仅标记 P0/P1 高危问题，低风险配置/文档变更不要噪音。
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # 备选：把上面的 step 换成以下任一，即可切换厂商（同一框架，互补能力）：
+      #   - openai/codex-action        # CI/CD 自动化、云端并行、轻量降噪
+      #   - google-github-actions/run-gemini-cli  # 大代码库/架构审计/五维审查
+
+  # ---------- 高危变更强制人工终审（认证/支付/库迁移/基础设施） ----------
+  human-gate:
+    name: Human Sign-off for High-risk
+    needs: build
+    if: ${{ contains(github.event.pull_request.title, '[高危]') || contains(github.event.pull_request.body, 'HIGH-RISK') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require manual approval
+        run: |
+          echo "检测到高危变更（认证/支付/库迁移/基础设施），必须由人工终审后方可合并。"
+          echo "请在 PR 描述中确认已通过人工评审，否则请勿合并。"
+          exit 0   # 仅提示；真正的强制拦截由分支保护规则（required reviewers）执行

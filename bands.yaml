@@ -1,0 +1,90 @@
+# bands.yaml — 核心业务指标可接受区间（维护阶段工件）
+# 工件来源：AI 原生 SDLC「维护阶段」。监控越界即自动生成 intent.md，回流到规划阶段形成闭环。
+# action: open_incident=告警工单；page_oncall=呼叫值守；write_intent=true 时自动写需求文件
+
+# ---------- 网关 / 入口 ----------
+- metric: gateway_p99_latency_ms
+  service: smart-parking-gateway
+  band: [0, 800]            # 非功能需求：系统响应 < 2s，网关侧留余量
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: gateway_error_rate_pct
+  service: smart-parking-gateway
+  band: [0, 1.0]
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 订单（入场/出场，最高频写路径） ----------
+- metric: order_entry_p99_ms
+  service: smart-parking-order
+  band: [0, 200]            # 计划书要求入场同步 < 200ms
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: order_create_error_rate_pct
+  service: smart-parking-order
+  band: [0, 0.5]
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 支付（高危，必须人工终审相关故障） ----------
+- metric: payment_callback_p99_ms
+  service: smart-parking-payment
+  band: [0, 1000]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+- metric: payment_recon_diff_amount
+  service: smart-parking-payment
+  band: [0, 0]             # 对账差额必须为 0，非 0 即异常
+  on_breach:
+    severity: critical
+    action: page_oncall
+    write_intent: true
+
+# ---------- 车位状态缓存一致性 ----------
+- metric: space_cache_miss_rate_pct
+  service: smart-parking-parking
+  band: [0, 20]
+  on_breach:
+    severity: medium
+    action: open_incident
+    write_intent: false
+
+# ---------- 消息队列积压（最终一致性关键） ----------
+- metric: mq_order_backlog
+  service: rabbitmq
+  band: [0, 500]
+  on_breach:
+    severity: high
+    action: page_oncall
+    write_intent: true
+
+# ---------- 设备在线率（道闸/摄像头/地磁） ----------
+- metric: device_offline_rate_pct
+  service: smart-parking-device
+  band: [0, 2.0]
+  on_breach:
+    severity: high
+    action: open_incident
+    write_intent: true
+
+# ---------- 数据库可用连接 ----------
+- metric: mysql_active_connections
+  service: smart_parking
+  band: [0, 80]             # 以最大连接数的 80% 为安全水位
+  on_breach:
+    severity: high
+    action: page_oncall
+    write_intent: false

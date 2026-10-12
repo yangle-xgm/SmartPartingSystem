@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartparking.parking.mapper.ParkingSpaceMapper">
+
+    <!-- 统计各区域车位状态 -->
+    <select id="selectAreaStatusStatistics" resultType="java.util.HashMap">
+        SELECT area, status, COUNT(*) AS count
+        FROM parking_space
+        WHERE is_deleted = 0
+        GROUP BY area, status
+    </select>
+</mapper>

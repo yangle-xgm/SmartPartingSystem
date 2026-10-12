@@ -1,0 +1,108 @@
+spring:
+  cloud:
+    gateway:
+      routes:
+        # 用户服务
+        - id: smart-parking-user
+          uri: lb://smart-parking-user
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - StripPrefix=0
+
+        # 操作审计服务（AuditLogController 部署在 user 服务内）
+        - id: smart-parking-audit
+          uri: lb://smart-parking-user
+          predicates:
+            - Path=/api/audit/**
+          filters:
+            - StripPrefix=0
+
+        # 车位服务
+        - id: smart-parking-parking
+          uri: lb://smart-parking-parking
+          predicates:
+            - Path=/api/parking/**
+          filters:
+            - StripPrefix=0
+
+        # 车辆服务
+        - id: smart-parking-vehicle
+          uri: lb://smart-parking-vehicle
+          predicates:
+            - Path=/api/vehicle/**
+          filters:
+            - StripPrefix=0
+
+        # 订单服务
+        - id: smart-parking-order
+          uri: lb://smart-parking-order
+          predicates:
+            - Path=/api/order/**
+          filters:
+            - StripPrefix=0
+
+        # 支付服务
+        - id: smart-parking-payment
+          uri: lb://smart-parking-payment
+          predicates:
+            - Path=/api/payment/**
+          filters:
+            - StripPrefix=0
+
+        # 通知服务
+        - id: smart-parking-notify
+          uri: lb://smart-parking-notify
+          predicates:
+            - Path=/api/notify/**
+          filters:
+            - StripPrefix=0
+
+        # 设备服务
+        - id: smart-parking-device
+          uri: lb://smart-parking-device
+          predicates:
+            - Path=/api/device/**
+          filters:
+            - StripPrefix=0
+
+        # 统计服务
+        - id: smart-parking-stats
+          uri: lb://smart-parking-stats
+          predicates:
+            - Path=/api/stats/**
+          filters:
+            - StripPrefix=0
+
+        # AI服务
+        - id: smart-parking-ai
+          uri: lb://smart-parking-ai
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=0
+
+      # 默认过滤器
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+
+      # 全局跨域配置
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+  data:
+    redis:
+      host: localhost
+      port: 6380
+      database: 0
+
+# 日志
+logging:
+  level:
+    org.springframework.cloud.gateway: debug

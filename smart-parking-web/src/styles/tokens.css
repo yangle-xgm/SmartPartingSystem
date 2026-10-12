@@ -1,0 +1,222 @@
+/* ============================================================
+   智慧星河 SmartGalaxy · Design Tokens V5.0（Vue3 全局样式）
+   ------------------------------------------------------------
+   用法：
+     ① main.js 中 import './styles/tokens.css'
+     ② 组件颜色 / 圆角 / 间距 / 动效只允许引用 --sp-* 变量
+   规则：全站颜色 / 圆角 / 间距 / 动效只允许引用 --sp-* 变量，
+         禁止在组件里写死色值字号。
+   ============================================================ */
+
+:root {
+  /* ---------- 色彩（高级灰 + 唯一焦点色） ---------- */
+  --sp-bg: #0B0A16;                                  /* 页面主背景 */
+  --sp-bg-grad: radial-gradient(1100px at 85% -10%, #1A1630 0%, #0B0A16 60%);
+  --sp-card: rgba(255, 255, 255, 0.04);              /* 卡片毛玻璃底 */
+  --sp-card-border: rgba(255, 255, 255, 0.08);       /* 卡片边框 */
+  --sp-brand: #7C8DB5;                               /* 主色：雾霾蓝 */
+  --sp-brand-bright: #9AA9C7;                        /* 主色增强：银河灰 */
+  --sp-teal: #7BC8B0;                                /* 点缀：极光青（成功/在线） */
+  --sp-gold: #F0C987;                                /* 焦点色：星光金（CTA/关键数字/选中） */
+  --sp-rose: #B48B9D;                                /* 点缀：玫瑰灰 */
+  --sp-danger: #D98C8C;                              /* 危险：砖红灰 */
+  --sp-warning: #E0B36A;                             /* 警告 */
+  --sp-text: #EDF1F8;                                /* 文字主色：冷白 */
+  --sp-text-2: #93A3BF;                              /* 文字辅助 */
+  --sp-text-3: #5C6B8A;                              /* 文字弱化 */
+
+  /* ---------- 阴影与光晕 ---------- */
+  --sp-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --sp-glow-teal: 0 0 40px rgba(123, 200, 176, 0.12);
+  --sp-glow-gold: 0 0 60px rgba(240, 201, 135, 0.25);
+
+  /* ---------- 圆角 ---------- */
+  --sp-radius-card: 16px;
+  --sp-radius-btn: 12px;
+  --sp-radius-tag: 8px;
+  --sp-radius-pill: 999px;
+
+  /* ---------- 间距（4 的倍数） ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --sp-page-max: 1360px;      /* 页面最大宽度 */
+  --sp-pad-page: 32px;        /* 页面全局 padding */
+  --sp-gap-block: 48px;       /* 区块间距 */
+  --sp-gap-card: 24px;        /* 卡片间距 */
+
+  /* ---------- 动效 ---------- */
+  --sp-dur-micro: 150ms;      /* 微交互 */
+  --sp-dur-comp: 250ms;       /* 组件 */
+  --sp-dur-page: 400ms;       /* 页面级 */
+  --sp-dur-hero: 600ms;       /* 大场景 */
+  --sp-ease: cubic-bezier(0.22, 1, 0.36, 1);   /* 全站唯一缓动 */
+
+  /* ---------- 字体 ---------- */
+  --sp-font: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --sp-font-size: 14px;
+  --sp-title-weight: 800;
+  --sp-body-weight: 400;
+  --sp-line-title: 1.15;
+  --sp-line-body: 1.6;
+
+  /* ---------- 图表色板 ---------- */
+  --sp-chart-1: #7C8DB5;
+  --sp-chart-2: #7BC8B0;
+  --sp-chart-3: #F0C987;
+  --sp-chart-4: #B48B9D;
+  --sp-chart-5: #D98C8C;
+  --sp-chart-grid: rgba(255, 255, 255, 0.06);
+
+  /* ---------- 动效别名（V8 星仔点亮组件引用，指向现有值） ---------- */
+  --sp-duration-micro: 150ms;                          /* = --sp-dur-micro */
+  --sp-duration-component: 250ms;                      /* = --sp-dur-comp */
+  --sp-duration-page: 400ms;                           /* = --sp-dur-page */
+  --sp-duration-scene: 600ms;                          /* = --sp-dur-hero */
+  --sp-focus: #F0C987;                                 /* 星光金焦点色 = --sp-gold */
+  --sp-focus-glow: 0 0 60px rgba(240, 201, 135, 0.25); /* = --sp-glow-gold */
+  --sp-aurora: #7BC8B0;                                /* 极光青 = --sp-teal */
+  --sp-aurora-glow: 0 0 40px rgba(123, 200, 176, 0.12);/* = --sp-glow-teal */
+  --sp-text-weak: #5C6B8A;                             /* 文字弱化 = --sp-text-3 */
+  --sp-text-main: #EDF1F8;                             /* 文字主色 = --sp-text */
+
+  /* ---------- 框架（侧边栏/头部） ---------- */
+  --sp-sidebar-bg: rgba(13, 11, 26, 0.92);
+  --sp-sidebar-logo-bg: rgba(26, 22, 48, 0.6);
+  --sp-header-bg: rgba(13, 11, 26, 0.75);
+  --sp-divider: rgba(255, 255, 255, 0.06);
+  --sp-hover-bg: rgba(255, 255, 255, 0.06);
+  --sp-active-grad: linear-gradient(135deg, rgba(124, 141, 181, 0.22), rgba(123, 200, 176, 0.14));
+}
+
+/* ---------- 基础重置 ---------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: var(--sp-font);
+  font-size: var(--sp-font-size);
+  line-height: var(--sp-line-body);
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 {
+  line-height: var(--sp-line-title);
+  font-weight: var(--sp-title-weight);
+}
+a { color: var(--sp-teal); text-decoration: none; }
+
+/* ---------- 工具类（所有页面复用） ---------- */
+.sp-card {
+  background: var(--sp-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--sp-card-border);
+  border-radius: var(--sp-radius-card);
+  box-shadow: var(--sp-shadow);
+}
+.sp-page {
+  max-width: var(--sp-page-max);
+  margin: 0 auto;
+  padding: var(--sp-pad-page);
+}
+.sp-num { font-variant-numeric: tabular-nums; }   /* 数字等宽，表格/指标对齐 */
+.sp-text-2 { color: var(--sp-text-2); }
+.sp-text-3 { color: var(--sp-text-3); }
+.sp-gold { color: var(--sp-gold); }
+.sp-teal { color: var(--sp-teal); }
+
+/* ---------- Element Plus 深色主题覆盖（品牌页 .dark 容器 / 全局 html.dark 兼容） ---------- */
+html.dark, .dark {
+  --el-color-primary: var(--sp-brand);
+  --el-color-success: var(--sp-teal);
+  --el-color-warning: var(--sp-warning);
+  --el-color-danger: var(--sp-danger);
+  --el-color-error: var(--sp-danger);
+  --el-bg-color: var(--sp-bg);
+  --el-bg-color-overlay: #16122B;
+  --el-text-color-primary: var(--sp-text);
+  --el-text-color-regular: var(--sp-text-2);
+  --el-text-color-secondary: var(--sp-text-3);
+  --el-text-color-placeholder: var(--sp-text-3);
+  --el-border-color: var(--sp-card-border);
+  --el-border-color-light: rgba(255, 255, 255, 0.06);
+  --el-fill-color-blank: rgba(255, 255, 255, 0.04);
+  --el-fill-color-light: rgba(255, 255, 255, 0.06);
+  --el-fill-color: rgba(255, 255, 255, 0.05);
+  --el-border-radius-base: var(--sp-radius-btn);
+  --el-font-family: var(--sp-font);
+  --el-box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --el-box-shadow-light: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* ---------- 浅色分支（管理端 .light 容器，纯 CSS 变量切换） ---------- */
+.light {  --sp-bg: #F4F6FA;
+  --sp-bg-grad: linear-gradient(160deg, #F8FAFD 0%, #F4F6FA 60%);
+  --sp-card: #FFFFFF;
+  --sp-card-border: #E6E9F0;
+  --sp-brand: #4C6FA8;
+  --sp-brand-bright: #5E7FBB;
+  --sp-teal: #2E9E7C;
+  --sp-gold: #B07B24;               /* 深金：浅色下焦点色，保证对比度 */
+  --sp-rose: #A47288;
+  --sp-danger: #C25E5E;
+  --sp-warning: #C98F2F;
+  --sp-text: #232838;
+  --sp-text-2: #5A6577;
+  --sp-text-3: #5F6B85;             /* 浅色弱化文字，对比度 ≈4.9:1 ✅ */
+  --sp-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  --sp-glow-teal: none;
+  --sp-glow-gold: none;
+  --sp-chart-grid: rgba(35, 40, 56, 0.08);
+
+  /* 框架（管理端侧边栏/头部） */
+  --sp-sidebar-bg: #FFFFFF;
+  --sp-sidebar-logo-bg: #F4F6FA;
+  --sp-header-bg: rgba(255, 255, 255, 0.85);
+  --sp-divider: #E6E9F0;
+  --sp-hover-bg: rgba(35, 40, 56, 0.06);
+  --sp-active-grad: linear-gradient(135deg, rgba(76, 111, 168, 0.10), rgba(46, 158, 124, 0.08));
+
+  /* Element Plus 浅色（管理端） */
+  --el-color-primary: var(--sp-brand);
+  --el-color-success: var(--sp-teal);
+  --el-color-warning: var(--sp-warning);
+  --el-color-danger: var(--sp-danger);
+  --el-color-error: var(--sp-danger);
+  --el-bg-color: #FFFFFF;
+  --el-bg-color-overlay: #FFFFFF;
+  --el-text-color-primary: var(--sp-text);
+  --el-text-color-regular: var(--sp-text-2);
+  --el-text-color-secondary: var(--sp-text-3);
+  --el-text-color-placeholder: #9AA3B2;
+  --el-border-color: var(--sp-card-border);
+  --el-border-color-light: #EDF0F5;
+  --el-fill-color-blank: #FFFFFF;
+  --el-fill-color-light: #F2F4F8;
+  --el-fill-color: #EDF0F5;
+  --el-border-radius-base: var(--sp-radius-btn);
+  --el-font-family: var(--sp-font);
+  --el-box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  --el-box-shadow-light: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+/* 管理端浅色时 body 背景跟随（避免滚动边缘露出深色） */
+html:has(.layout-container.light) body {
+  background: #F4F6FA;
+}
+
+/* ---------- 无障碍：用户偏好减少动效 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

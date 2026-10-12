@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>智慧星河 · 探照灯登录页（V5.0 光感版）</title>
+<style>
+  :root{
+    --bg-0:#0B0A16; --bg-1:#1A1630;
+    --brand:#7C8DB5; --brand-b:#9AA9C7;
+    --teal:#7BC8B0; --gold:#F0C987; --rose:#B48B9D; --red:#D98C8C;
+    --text:#EDF1F8; --text-2:#93A3BF; --text-3:#5C6B8A;
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    min-height:100vh;background:var(--bg-0);overflow:hidden;
+    font-family:'Inter','PingFang SC','Microsoft YaHei',sans-serif;
+    color:var(--text);-webkit-font-smoothing:antialiased;
+    display:flex;align-items:center;justify-content:center;cursor:none;
+  }
+  /* L0 氛围光：页面四角基础光晕，避免死黑 */
+  body::before{
+    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(1100px at 85% -10%, rgba(26,22,48,.95) 0%, rgba(11,10,22,0) 60%),
+      radial-gradient(900px at 8% 108%, rgba(123,200,176,.09) 0%, rgba(11,10,22,0) 55%),
+      radial-gradient(700px at 108% 92%, rgba(240,201,135,.07) 0%, rgba(11,10,22,0) 55%);
+  }
+  #stars{position:fixed;inset:0;z-index:1;pointer-events:none}
+  .hero{position:relative;z-index:3;text-align:center;padding:40px 24px;max-width:960px;width:100%}
+
+  .logo{display:inline-flex;align-items:center;gap:12px;margin-bottom:36px;
+    opacity:0;transform:translateY(24px);animation:rise .9s var(--ease) .2s forwards}
+  .logo-icon{width:52px;height:52px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--brand),var(--teal));color:#0B0A16;font-size:24px;font-weight:700;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 8px 32px rgba(123,200,176,.18),0 0 60px rgba(123,200,176,.12)}
+  .logo-text{font-size:20px;font-weight:500;letter-spacing:4px;color:var(--text)}
+  .logo-text em{font-style:normal;color:var(--teal)}
+
+  .title{font-size:clamp(52px,11vw,116px);font-weight:800;line-height:1.15;letter-spacing:.12em;
+    color:transparent;-webkit-text-fill-color:transparent;
+    background:linear-gradient(135deg,#EDF1F8 0%,#9AA9C7 38%,#7BC8B0 66%,#F0C987 100%);
+    -webkit-background-clip:text;background-clip:text;
+    margin-bottom:18px;filter:drop-shadow(0 0 60px rgba(123,200,176,.08));
+    opacity:0;transform:translateY(24px);animation:rise .9s var(--ease) .45s forwards}
+  .title .tc{display:inline-block;will-change:transform,filter,text-shadow}
+  .subtitle{font-size:clamp(15px,2vw,21px);color:var(--text-2);letter-spacing:.42em;text-indent:.42em;
+    font-weight:300;margin-bottom:44px;
+    opacity:0;transform:translateY(24px);animation:rise .9s var(--ease) .7s forwards}
+  .subtitle b{color:var(--gold);font-weight:400}
+
+  .actions{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;
+    opacity:0;transform:translateY(24px);animation:rise .9s var(--ease) .95s forwards}
+  .btn{position:relative;padding:15px 46px;border-radius:999px;font-size:15px;font-weight:500;
+    letter-spacing:3px;border:none;cursor:pointer;font-family:inherit;overflow:hidden;
+    transition:transform .35s var(--ease),box-shadow .35s var(--ease),background .35s ease}
+  .btn-primary{background:linear-gradient(135deg,var(--brand),var(--teal));color:#0B0A16;
+    box-shadow:0 4px 24px rgba(123,200,176,.22)}
+  .btn-primary:hover{transform:translateY(-4px);box-shadow:0 10px 44px rgba(123,200,176,.35)}
+  .btn-ghost{background:rgba(255,255,255,.04);backdrop-filter:blur(14px);
+    color:var(--text-2);border:1px solid rgba(255,255,255,.09)}
+  .btn-ghost:hover{background:rgba(255,255,255,.08);color:var(--text);transform:translateY(-4px)}
+
+  .mascot-area{margin-top:52px;opacity:0;transform:translateY(24px);animation:rise .9s var(--ease) 1.2s forwards}
+  .mascot{display:inline-flex;flex-direction:column;align-items:center;gap:12px}
+  .mascot-star{width:110px;height:110px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:44px;background:radial-gradient(circle at 32% 30%,#F7DFA6,#C9A86A 70%);
+    box-shadow:0 8px 40px rgba(240,201,135,.16),inset 0 0 24px rgba(255,255,255,.18);
+    border:2px solid rgba(255,255,255,.1);animation:float 3.2s ease-in-out infinite;
+    transition:box-shadow .3s ease}
+  .mascot-label{font-size:13px;color:var(--text-3);letter-spacing:3px}
+  .mascot-label b{color:var(--gold);font-weight:500}
+
+  .cursor-dot,.cursor-ring{position:fixed;top:0;left:0;pointer-events:none;z-index:99;border-radius:50%}
+  .cursor-dot{width:8px;height:8px;background:var(--gold);box-shadow:0 0 12px rgba(240,201,135,.8);transform:translate(-50%,-50%)}
+  .cursor-ring{width:34px;height:34px;border:1.5px solid rgba(240,201,135,.55);transform:translate(-50%,-50%);
+    transition:width .25s var(--ease),height .25s var(--ease),border-color .25s ease}
+  .cursor-ring.is-active{width:54px;height:54px;border-color:rgba(123,200,176,.7)}
+
+  .meteor{position:fixed;z-index:4;width:2px;height:2px;border-radius:50%;pointer-events:none;
+    background:linear-gradient(90deg,rgba(237,241,248,.9),transparent);
+    box-shadow:0 0 8px 1px rgba(237,241,248,.5)}
+
+  .footer-info{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:5;
+    color:rgba(147,163,191,.28);font-size:12px;letter-spacing:4px;pointer-events:none}
+
+  @keyframes rise{to{opacity:1;transform:translateY(0)}}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+
+  @media (hover:none){body{cursor:auto}.cursor-dot,.cursor-ring{display:none}}
+  @media (max-width:768px){
+    .title{font-size:44px;letter-spacing:.08em}
+    .subtitle{font-size:14px;letter-spacing:.25em;text-indent:.25em}
+    .btn{padding:13px 30px;font-size:13px;letter-spacing:2px}
+    .mascot-star{width:84px;height:84px;font-size:34px}
+    .logo-icon{width:40px;height:40px;font-size:18px}
+    .logo-text{font-size:17px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .logo,.title,.subtitle,.actions,.mascot-area{animation:none;opacity:1;transform:none}
+    .mascot-star{animation:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="cursor-dot" id="dot"></div>
+<div class="cursor-ring" id="ring"></div>
+
+<div class="hero">
+  <div class="logo">
+    <div class="logo-icon">✦</div>
+    <div class="logo-text">智慧<em>星河</em></div>
+  </div>
+  <h1 class="title" id="title">
+    <span class="tc" data-depth=".02">智</span><span class="tc" data-depth=".04">慧</span><span class="tc" data-depth=".06">星</span><span class="tc" data-depth=".08">河</span>
+  </h1>
+  <p class="subtitle">让每一次停泊，都有<b>星光</b>指引</p>
+  <div class="actions">
+    <button class="btn btn-primary">✦ 进入系统</button>
+    <button class="btn btn-ghost">了解更多</button>
+  </div>
+  <div class="mascot-area">
+    <div class="mascot">
+      <div class="mascot-star">⭐</div>
+      <div class="mascot-label">✧ 星仔 <b>Starzo</b> ✧</div>
+    </div>
+  </div>
+</div>
+<div class="footer-info">✦ 智慧星河 · 让每一次停泊都有星光指引 ✦</div>
+
+<script>
+(function(){
+'use strict';
+var isTouch=('ontouchstart' in window)||(navigator.maxTouchPoints>0);
+var canvas=document.getElementById('stars'),ctx=canvas.getContext('2d');
+var W=0,H=0,stars=[],LIGHT_R=280;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+resize();window.addEventListener('resize',resize);
+function makeStar(far){return{x:Math.random()*W,y:Math.random()*H,
+  r:far?Math.random()*1.1+.4:Math.random()*1.6+.9,
+  base:far?Math.random()*.45+.25:Math.random()*.5+.35,
+  tw:Math.random()*.02+.008,ph:Math.random()*Math.PI*2,far:far,glow:0}}
+for(var i=0;i<130;i++)stars.push(makeStar(true));
+for(var j=0;j<38;j++)stars.push(makeStar(false));
+
+var mx=W/2,my=H/2,tx=mx,ty=my,touchActive=false,touchTimer=null,sweep=0;
+window.addEventListener('mousemove',function(e){tx=e.clientX;ty=e.clientY});
+window.addEventListener('touchstart',function(){touchActive=true;clearTimeout(touchTimer);touchTimer=setTimeout(function(){touchActive=false},4000)},{passive:true});
+window.addEventListener('touchmove',function(e){if(e.touches&&e.touches[0]){touchActive=true;tx=e.touches[0].clientX;ty=e.touches[0].clientY;clearTimeout(touchTimer);touchTimer=setTimeout(function(){touchActive=false},4000)}},{passive:true});
+function autoSweep(){sweep+=.004;tx=W*(.5+.42*Math.sin(sweep));ty=H*(.5+.32*Math.cos(sweep*1.3))}
+
+var chars=[].slice.call(document.querySelectorAll('.title .tc'));
+function charCenter(el){var r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}}
+
+var dot=document.getElementById('dot'),ring=document.getElementById('ring'),rx=mx,ry=my;
+var btns=[].slice.call(document.querySelectorAll('.btn'));
+btns.forEach(function(b){
+  b.addEventListener('mouseenter',function(){ring.classList.add('is-active')});
+  b.addEventListener('mouseleave',function(){ring.classList.remove('is-active')});
+});
+
+function spawnMeteor(){
+  var m=document.createElement('div');m.className='meteor';
+  var sx=W*.1+Math.random()*W*.8,sy=H*.05+Math.random()*H*.25;
+  m.style.left=sx+'px';m.style.top=sy+'px';document.body.appendChild(m);
+  var dist=Math.min(W,H)*.6+120,dx=Math.cos(-25*Math.PI/180)*dist,dy=Math.sin(-25*Math.PI/180)*dist;
+  try{
+    m.animate([{transform:'translate(0,0) scale(1)',opacity:1},
+      {transform:'translate('+dx+'px,'+dy+'px) scale(.3)',opacity:0}],
+      {duration:900+Math.random()*400,easing:'cubic-bezier(.2,.6,.4,1)'});
+  }catch(e){}
+  setTimeout(function(){if(m.parentNode)m.parentNode.removeChild(m)},1600);
+  setTimeout(spawnMeteor,6000+Math.random()*6000);
+}
+
+function frame(){
+  if(isTouch&&!touchActive)autoSweep();
+  mx+=(tx-mx)*.08;my+=(ty-my)*.08;
+  ctx.clearRect(0,0,W,H);
+  /* 粒子：靠近灯光才点亮 */
+  for(var k=0;k<stars.length;k++){
+    var s=stars[k];s.ph+=s.tw;
+    var d=Math.hypot(s.x-mx,s.y-my);
+    var target=d<LIGHT_R?1:(d<LIGHT_R*2.2?1-(d-LIGHT_R)/(LIGHT_R*1.2):0);
+    s.glow+=(target-s.glow)*.12;
+    var a=s.base*(.65+.35*Math.sin(s.ph))*(.25+.75*s.glow);
+    ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fillStyle='rgba(235,243,255,'+a.toFixed(3)+')';ctx.fill();
+    if(s.glow>.35&&!s.far){
+      ctx.beginPath();ctx.arc(s.x,s.y,s.r*3.4,0,Math.PI*2);
+      ctx.fillStyle='rgba(240,201,135,'+(.08*s.glow).toFixed(3)+')';ctx.fill();
+    }
+  }
+  /* L1 探照灯光：加亮合成（不是压暗） */
+  var g=ctx.createRadialGradient(mx,my,0,mx,my,540);
+  g.addColorStop(0,'rgba(255,252,245,0.10)');
+  g.addColorStop(.3,'rgba(240,201,135,0.07)');
+  g.addColorStop(.55,'rgba(123,200,176,0.035)');
+  g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle=g;ctx.fillRect(mx-540,my-540,1080,1080);
+  var g2=ctx.createRadialGradient(mx,my,0,mx,my,950);
+  g2.addColorStop(0,'rgba(240,201,135,0.05)');
+  g2.addColorStop(.5,'rgba(123,200,176,0.02)');
+  g2.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g2;ctx.fillRect(mx-950,my-950,1900,1900);
+  ctx.globalCompositeOperation='source-over';
+  /* L2 文字感光 + 视差 */
+  for(var c=0;c<chars.length;c++){
+    var el=chars[c],p=charCenter(el);
+    var dd=Math.hypot(p.x-mx,p.y-my);
+    var ii=Math.max(0,1-dd/280);
+    el.style.textShadow='0 0 '+(18+46*ii).toFixed(0)+'px rgba(240,201,135,'+(.12+.4*ii).toFixed(2)+')';
+    el.style.filter='brightness('+(1+.3*ii).toFixed(2)+')';
+    var dep=parseFloat(el.getAttribute('data-depth'))||.04;
+    el.style.transform='translate('+((mx-W/2)*dep).toFixed(1)+'px,'+((my-H/2)*dep*.6).toFixed(1)+'px)';
+  }
+  /* 自定义光标 */
+  if(!isTouch){
+    dot.style.left=mx+'px';dot.style.top=my+'px';
+    rx+=(mx-rx)*.16;ry+=(my-ry)*.16;
+    ring.style.left=rx+'px';ring.style.top=ry+'px';
+  }
+  requestAnimationFrame(frame);
+}
+setTimeout(function(){if(isTouch)autoSweep();frame()},80);
+setTimeout(function(){try{spawnMeteor()}catch(e){}},4000);
+})();
+</script>
+</body>
+</html>

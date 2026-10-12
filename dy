@@ -1,0 +1,1 @@
+{"code":500,"message":"HttpMessageNotReadableException: Required request body is missing: public com.smartparking.common.core.domain.Result<java.lang.String> com.smartparking.user.controller.SysUserController.login(com.smartparking.user.dto.LoginDTO)","data":null,"timestamp":1789357249282}

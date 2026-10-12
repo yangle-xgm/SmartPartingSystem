@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: sp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 21491879
+      MYSQL_DATABASE: smart_parking
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  redis:
+    image: redis:7
+    container_name: sp-redis
+    ports:
+      - "6380:6379"
+
+  nacos:
+    image: nacos/nacos-server:v2.3.1
+    container_name: sp-nacos
+    environment:
+      MODE: standalone
+    ports:
+      - "8849:8848"
+      - "9849:9848"   # gRPC：Nacos2.x client 配 8849 会自动连 8849+1000=9849，必须一致
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: sp-rabbitmq
+    environment:
+      RABBITMQ_PLUGINS: rabbitmq_management,rabbitmq_mqtt
+    ports:
+      - "5673:5672"    # AMQP：后端连 localhost:5673
+      - "15760:15672"  # 管理台：15672/15673 均落在 Windows Hyper-V 保留区间 15654-15753，改用区间外的 15760
+      - "18830:1883"   # MQTT 端口
+
+volumes:
+  mysql-data:

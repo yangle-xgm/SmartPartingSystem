@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartparking.stats.mapper.ParkingStatsMapper">
+
+    <!-- 查询指定日期的统计数据 -->
+    <select id="selectByDate" resultType="com.smartparking.stats.po.ParkingStats">
+        SELECT *
+        FROM parking_stats
+        WHERE stat_date = #{date} AND is_deleted = 0
+    </select>
+
+    <!-- 查询日期范围内的总收入 -->
+    <select id="sumIncomeByDateRange" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(total_income), 0)
+        FROM parking_stats
+        WHERE stat_date BETWEEN #{startDate} AND #{endDate} AND is_deleted = 0
+    </select>
+
+    <!-- 按小时统计入场数量（用于高峰时段分析） -->
+    <select id="selectEntryCountByHour" resultType="java.util.HashMap">
+        SELECT HOUR(entry_time) AS hour, COUNT(*) AS count
+        FROM parking_order
+        WHERE DATE(entry_time) = #{date} AND is_deleted = 0
+        GROUP BY HOUR(entry_time)
+        ORDER BY hour
+    </select>
+</mapper>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F5D77B"/>
+      <stop offset="100%" stop-color="#C9B08B"/>
+    </linearGradient>
+    <linearGradient id="vestGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2D3A5E"/>
+      <stop offset="100%" stop-color="#1E2742"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+  <!-- antenna -->
+  <line x1="100" y1="35" x2="100" y2="12" stroke="#8B9BB4" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="100" cy="12" r="6" fill="#7BC8B0" filter="url(#glow)"/>
+  <!-- star head -->
+  <polygon points="100,30 114.1,65.6 152.3,68 122.8,92.4 132.3,129.5 100,109 67.7,129.5 77.2,92.4 47.7,68 85.9,65.6"
+           fill="url(#bodyGrad)" stroke="#C9B08B" stroke-width="2" stroke-linejoin="round"/>
+  <!-- LED eyes -->
+  <ellipse cx="84" cy="85" rx="7" ry="9" fill="#7BC8B0"/>
+  <ellipse cx="116" cy="85" rx="7" ry="9" fill="#7BC8B0"/>
+  <circle cx="84" cy="86" r="2.5" fill="#0D0B1A"/>
+  <circle cx="116" cy="86" r="2.5" fill="#0D0B1A"/>
+  <path d="M81 82 L81 90 M113 82 L113 90" stroke="#0D0B1A" stroke-width="2" stroke-linecap="round"/>
+  <!-- smile -->
+  <path d="M90 102 Q100 109 110 102" stroke="#0D0B1A" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- cheek highlights -->
+  <circle cx="78" cy="94" r="3" fill="#F5D77B" opacity="0.6"/>
+  <circle cx="122" cy="94" r="3" fill="#F5D77B" opacity="0.6"/>
+  <!-- vest body -->
+  <path d="M70,125 Q60,125 60,145 L60,178 Q60,188 75,188 L125,188 Q140,188 140,178 L140,145 Q140,125 130,125 Z" fill="url(#vestGrad)"/>
+  <rect x="62" y="152" width="76" height="8" rx="4" fill="#E8EDF5" opacity="0.9"/>
+  <!-- arms -->
+  <path d="M70,150 Q55,160 50,170" stroke="#2D3A5E" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="50" cy="170" r="5" fill="#F5D77B"/>
+  <path d="M130,150 Q145,160 155,165" stroke="#2D3A5E" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="155" cy="165" r="5" fill="#F5D77B"/>
+  <!-- mini barrier -->
+  <rect x="158" y="135" width="4" height="45" rx="1" fill="#8B9BB4"/>
+  <rect x="145" y="135" width="34" height="10" rx="2" fill="#C48B8B"/>
+  <rect x="145" y="139" width="34" height="2" fill="#fff" opacity="0.8"/>
+  <!-- legs -->
+  <rect x="78" y="185" width="14" height="16" rx="6" fill="#2D3A5E"/>
+  <rect x="108" y="185" width="14" height="16" rx="6" fill="#2D3A5E"/>
+</svg>

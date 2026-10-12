@@ -1,0 +1,61 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3307/smart_parking?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 21491879
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 60000
+
+  data:
+    redis:
+      host: localhost
+      port: 6380
+      database: 0
+      timeout: 10000ms
+
+  rabbitmq:
+    host: localhost
+    port: 5673
+    username: guest
+    password: guest
+    virtual-host: /
+    publisher-confirm-type: correlated
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: assign_id
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+logging:
+  level:
+    com.smartparking: debug
+
+# ============ 自定义配置 ============
+smart-parking:
+  # 支付超时补偿：待支付超过该分钟数即触发补偿（演示可调小为 1）
+  payment-timeout-minutes: 30
+  # 订单服务地址（内部关单调用）
+  order-url: http://localhost:8084
+  # 用户服务地址（操作审计）
+  audit-url: http://localhost:8081
+  # 网关地址（支付确认直连兜底）
+  gateway-url: http://localhost:8080
