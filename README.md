@@ -155,7 +155,7 @@ smart-parking-system/
 | `MonitorLoop` | 驱动一轮闭环：逐条读数→判定→越界则写 intent 文件 |
 | `DemoMetricSource` | 演示实现，恒定返回 0.0（不触发越界），用于本地跑通流程 |
 
-**在任意服务模块接入（示例，用 `@Scheduled` 周期执行）：**
+**已在 `smart-parking-stats` 模块落地真实实现**（`monitor/MonitorAutoConfiguration` 周期驱动 + `common-core` 的 `PrometheusMetricSource` 对接 Prometheus）。该模块已暴露 `/actuator/prometheus` 并被 Prometheus 抓取，运行期加载 `bands.yaml`、按 `monitor.fixed-delay-ms`（默认 60s）轮询评估，越界且 `write_intent=true` 的指标自动把 `intent-<date>-<metric>.md` 写入 `monitor.output-dir`。以下为最小接入范式，供其它模块复用：
 
 ```java
 @Configuration
@@ -184,4 +184,32 @@ public class MonitorAutoConfiguration {
 生成的 `intent-*.md` 即下一轮「规划阶段」的需求输入，完成 **维护 → 规划** 的自动回流。
 
 > 详见 `docs/AI原生SDLC审计与落地报告.md` 与 `docs/sdlc/plan.md`（Phase A~E）。
+
+---
+
+## 可观测性：监控栈一键启动（Prometheus + Grafana）
+
+本项目已补齐监控闭环的“读数→评估→回流”全链路：
+
+- **指标采集**：`smart-parking-stats` 引入 `micrometer-registry-prometheus` + `spring-boot-starter-actuator`，暴露 `/actuator/prometheus`。
+- **真实指标源**：`common-core` 的 `PrometheusMetricSource` 调 Prometheus `/api/v1/query` 读取 `bands.yaml` 中各指标当前值（无数据/异常返回 `NaN`，不误报）。
+- **闭环驱动**：`MonitorAutoConfiguration` 周期性执行 `MonitorLoop.evaluateAll()`，越界自动生成 `intent-<date>-<metric>.md` 回流规划阶段。
+
+### 1. 启动监控栈
+
+```bash
+# 启动 Prometheus(9090) + Grafana(3000)，并抓取 stats 的 actuator 端点
+docker-compose up -d prometheus grafana
+```
+
+> 抓取目标在 `prometheus/prometheus.yml` 中配置。默认按 `host.docker.internal:8088` 抓取宿主机上运行的 `smart-parking-stats`（端口见 `bootstrap.yml` 的 `server.port=8088`）。若把 stats 也编排进 compose，可改为服务名 `smart-parking-stats:8088`。
+
+### 2. 查看面板
+
+- Prometheus 查询：`http://localhost:9090`，输入 `gateway_p99_latency_ms` 等。
+- Grafana：`http://localhost:3000`，账号/密码 `admin/admin`；已预置 Prometheus 数据源与「SmartParking 监控总览」面板（数据源配置见 `grafana/provisioning/`）。
+
+### 3. 当前边界（重要）
+
+`bands.yaml` 中的指标名（如 `gateway_p99_latency_ms`）目前**尚未在业务代码里埋点**，Prometheus 暂查不到 → `PrometheusMetricSource` 返回 `NaN` → 不越界、不误报。要让闭环产生真实告警，需在各服务埋对应命名的 Micrometer 指标（业务埋点为下一阶段工作）。此阶段已完成的是**管道打通**，而非业务指标就绪。
 

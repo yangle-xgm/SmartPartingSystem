@@ -1,0 +1,52 @@
+{
+  "title": "SmartParking 监控总览",
+  "uid": "smartparking-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "annotations": { "list": [] },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "网关 P99 延迟 (ms)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "gateway_p99_latency_ms", "refId": "A", "legendFormat": "gateway_p99" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "订单入场 P99 (ms)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "order_entry_p99_ms", "refId": "A", "legendFormat": "order_entry_p99" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "支付回调 P99 (ms)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "payment_callback_p99_ms", "refId": "A", "legendFormat": "payment_callback_p99" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "设备离线率 (%)",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "device_offline_rate_pct", "refId": "A", "legendFormat": "device_offline_rate" }
+      ]
+    }
+  ]
+}

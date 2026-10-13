@@ -38,5 +38,34 @@ services:
       - "15760:15672"  # 管理台：15672/15673 均落在 Windows Hyper-V 保留区间 15654-15753，改用区间外的 15760
       - "18830:1883"   # MQTT 端口
 
+  # ---------- 可观测性：Prometheus + Grafana（支撑 bands.yaml 监控闭环） ----------
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: sp-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sp-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   mysql-data:
+  prometheus-data:

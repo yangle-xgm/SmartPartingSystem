@@ -51,3 +51,30 @@ knife4j:
 logging:
   level:
     com.smartparking: debug
+
+# ---------- 可观测性：Actuator / Prometheus 端点 ----------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# ---------- 监控闭环（AI 原生 SDLC 维护阶段） ----------
+monitor:
+  enabled: true
+  # Prometheus 基础地址；Docker 网络内用服务名，本地裸跑用 localhost
+  prometheus-base-url: http://prometheus:9090
+  # bands 配置位置：支持 classpath:/ 或 file:/（运行时挂载覆盖）
+  bands-location: classpath:/bands.yaml
+  # 越界时生成的 intent 文件输出目录
+  output-dir: ./monitor-intents
+  # 轮询间隔（毫秒）
+  fixed-delay-ms: 60000
