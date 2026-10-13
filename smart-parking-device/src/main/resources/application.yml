@@ -48,3 +48,16 @@ logging:
   level:
     com.smartparking: debug
     org.eclipse.paho: info
+
+# ============ 可观测性：暴露 Prometheus 指标 ============
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

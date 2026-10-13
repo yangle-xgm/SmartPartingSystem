@@ -14,3 +14,28 @@ scrape_configs:
       # stats 服务在宿主机运行时（Docker 容器内 Prometheus 通过 host.docker.internal 访问宿主机）
       # 若把 smart-parking-stats 也编排进本 compose 网络，可改为 ['smart-parking-stats:8088']
       - targets: ['host.docker.internal:8088']
+
+  - job_name: 'smart-parking-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+
+  - job_name: 'smart-parking-order'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8084']
+
+  - job_name: 'smart-parking-payment'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8085']
+
+  - job_name: 'smart-parking-parking'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+
+  - job_name: 'smart-parking-device'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8087']
