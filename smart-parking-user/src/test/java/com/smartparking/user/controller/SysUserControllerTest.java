@@ -3,35 +3,49 @@ package com.smartparking.user.controller;
 import com.smartparking.user.service.AuditLogService;
 import com.smartparking.user.service.SysUserService;
 import com.smartparking.user.vo.UserVO;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 用户模块集成测试（Web 层切片）：验证登录/验证码/用户信息/刷新 Token 的 HTTP 映射与统一响应契约。
- * 不启动整个 Spring 上下文、不连 Nacos/Redis/MySQL，Service 全部 Mock。
+ * 用户模块控制器测试（纯 MockMvc standalone，不加载 Spring 上下文 / 不连 MyBatis / 不连 Nacos）。
+ * 直接构造 Controller 并注入 Mock 依赖，验证登录/验证码/用户信息/刷新 Token 的 HTTP 映射与统一响应契约。
+ *
+ * 说明：项目主类带 @MapperScan，若用 @WebMvcTest 会自动扫描 MyBatis Mapper 并因缺少 SqlSessionFactory 而在
+ * 干净构建（CI 的 `mvn clean`）下起不来上下文。改用 standaloneSetup 彻底规避，跨平台稳定。
  */
-@WebMvcTest(controllers = SysUserController.class)
+@ExtendWith(MockitoExtension.class)
 class SysUserControllerTest {
 
-    @Autowired
+    @Mock
+    private SysUserService sysUserService;
+    @Mock
+    private AuditLogService auditLogService;
+
+    @InjectMocks
+    private SysUserController controller;
+
     private MockMvc mockMvc;
 
-    @MockBean
-    private SysUserService sysUserService;
-
-    @MockBean
-    private AuditLogService auditLogService;
+    @BeforeEach
+    void setUp() {
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
 
     @Test
     void login_returnsTokens() throws Exception {
