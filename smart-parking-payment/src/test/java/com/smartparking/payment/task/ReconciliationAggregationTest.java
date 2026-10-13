@@ -77,6 +77,6 @@ class ReconciliationAggregationTest {
                 rec(new BigDecimal("10.00"), 1));
         ReconSummary s = aggregate(list);
         assertEquals(0, s.status());
-        assertEquals(BigDecimal.ZERO, s.diffAmount());
+        assertEquals(new BigDecimal("20.00"), s.diffAmount()); // 两条已支付10.00：总额20.00 - 退款0 = 20.00
     }
 }
