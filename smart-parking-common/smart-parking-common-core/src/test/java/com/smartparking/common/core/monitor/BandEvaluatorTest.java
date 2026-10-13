@@ -66,7 +66,7 @@ class BandEvaluatorTest {
     }
 
     @Test
-    void loadBands_fromYaml_andEvaluateBreach() {
+    void loadBands_fromYaml_andEvaluateBreach() throws java.io.IOException {
         try (InputStream in = getClass().getResourceAsStream("/bands.yaml")) {
             assertNotNull(in, "bands.yaml 应位于 test resources");
             List<Band> bands = BandsLoader.load(in);
