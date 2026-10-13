@@ -41,7 +41,7 @@
 | smart-parking-notify | 8086 | notification | 通知 |
 | smart-parking-device | 8087 | device | 设备/MQTT/道闸 |
 | smart-parking-stats | 8088 | parking_stats | 统计（Redis Sorted Set 实时 + MQ 落库） |
-| smart-parking-ai | — | — | 车牌识别增强 / 智能客服（**未在计划书登记，属范围增量**） |
+| smart-parking-ai | 8090 | — | 车牌识别增强 / 智能客服（已在 `计划书.md` 登记；当前为 mock 脚手架，百度/豆包真实接入待补） |
 | smart-parking-common-* | — | — | core(Result/PageResult/AES/脱敏/异常) / redis / swagger |
 
 > **跨服务数据访问铁律**：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须用 OpenFeign 调 `/internal/**` 接口，网关不对外暴露 `/internal/**`。
@@ -99,7 +99,10 @@ mvn -B -pl smart-parking-order -am test -DfailIfNoTests=false
 
 ## 9. 当前已知债务（实现前必读 `docs/sdlc/plan.md`）
 
-- 🔴 **构建中断**：上次构建在 `smart-parking-user` 模块失败（见 `dependency-analyze.txt`），根因日志被截断，需本地 `mvn clean install` 复现定位。
-- 🟠 **文档与实现漂移**：DB 实际含 `community/reservation/share_income/feedback/payment_reconciliation` 等计划书之外的表；`smart-parking-ai` 模块未登记进任何架构文档。
-- 🟠 **测试极缺**：仅 `smart-parking-order` 有 1 个测试类，其余 11 模块零测试。
-- 🟠 **无 CI / 无监控闭环**：无 `.github` 工作流，无 `bands.yaml` 落库与告警→需求回流。
+> 最近评估：2026-10-13。构建已全绿、CI 已激活、`bands.yaml` 骨架已落地；以下为**仍待解决**的真实缺口（勿与已关闭项混淆）。
+
+- 🔴 **集成/API 测试近乎为零**：仅有 ~10 个纯逻辑单测；`user / notify / device / stats / ai` 模块零测试，全仓此前无 `@WebMvcTest`/`@SpringBootTest` 集成测试。CI 用 `mvn test -DfailIfNoTests=false`，无测试模块会"假绿"，且无 JaCoCo 覆盖率硬门槛（已加软门槛，待硬化）。
+- 🟠 **Phase D 监控未真正接线**：`bands.yaml` 无运行服务消费；`docker-compose` 无 Prometheus/Grafana；`DemoMetricSource` 恒返 0.0，闭环仅为骨架。
+- 🟠 **`smart-parking-ai` 是 mock 脚手架**：`PlateController.callBaiduApi()` 写死返回、百度识别路径未实现；`ChatController` 仅配置豆包+key 才走真模型，默认本地关键词 mock。
+- 🟠 **无 DB 迁移工具**：仅 `mapper/init.sql`+`data.sql` 手工导入，无 Flyway/Liquibase；跨服务 Feign `/internal` 调用无契约测试保障。
+- 🟢 **可观测性缺项**：无分布式追踪、无健康检查/探针、无 K8s 部署清单；`docker-compose` 只编排基础设施未编排微服务本身。

@@ -55,3 +55,16 @@
 
 ---
 *本仓库现已具备 AI 原生 SDLC 的完整工件骨架；构建已验证全绿，下一步是把「测试门禁实跑、CI 接入、文档同步」补齐，让闭环真正转起来。*
+
+## 五、P0 收尾记录（2026-10-13）
+
+针对上文"仍待解决缺口"的 P0 项已动手：
+
+1. **回填 `AGENTS.md` 漂移**：§3 的 `smart-parking-ai` 行注明已在 `计划书.md` 登记（端口 8090，当前为 mock 脚手架）；§9「已知债务」重写为当前真实缺口清单（集成测试缺、Phase D 未接线、AI 模块 mock、无 DB 迁移、可观测性缺项），与"12/12 PASS"解耦，避免文档自相矛盾。
+2. **补齐集成测试（user / order / gateway）**：
+   - `smart-parking-user` 模块此前**零测试且缺 `spring-boot-starter-test`** —— 已补依赖，新增 `SysUserControllerTest`（`@WebMvcTest` 切片，覆盖登录/验证码/用户信息/刷新 Token，Service 全 Mock，不连 Nacos/Redis/MySQL）。
+   - `smart-parking-order` 新增 `ParkingOrderControllerTest`（入场/出场/计费计算 HTTP 映射 + 统一响应契约，Feign 客户端 Mock）。
+   - `smart-parking-gateway` 新增 `AuthGlobalFilterTest`（直接驱动鉴权过滤器：白名单放行、缺 Token 401、合法 Token 注入下游头、业主访问管理端 403；用同一 SECRET 生成 JWT，无需 Spring 上下文）。
+3. **CI 加 JaCoCo 覆盖率软门槛**：根 POM 引入 `jacoco-maven-plugin`（prepare-agent + report + check），CI 在 `mvn test` 后执行 `mvn jacoco:report jacoco:check`。当前 `haltOnFailure=false`、INSTRUCTION 下限 0.10，仅采集与报告、不阻断构建；待基线测出后调高 `minimum` 并改为 `true` 硬化。
+
+> 注：本沙箱无 JDK/Maven，以上测试与 JaCoCo 配置均经静态核对（路径、签名、Mock 对象、JWT 密钥一致），仍须用户在本地 `mvn -B test -DfailIfNoTests=false` 实跑确认全绿。
