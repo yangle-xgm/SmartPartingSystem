@@ -56,7 +56,7 @@
 
 ---
 
-## Phase D — 监控闭环（维护阶段，P2）
+## Phase D — 监控闭环（维护阶段，P2） ✅ 已完成
 
 **Files to change, in order**
 1. `bands.yaml`：定义核心指标区间（p99 延迟、错误率、MQ 积压、设备离线率）。
@@ -67,7 +67,12 @@
 
 **Rollback**：停止采集任务即停闭环。
 
-**已落地（2026-10-12）**：`common-core` 新增 `monitor/Band.java`、`BandEvaluator.java`（evaluate + generateIntent）、`BandsLoader.java`（Hutool 解析 bands.yaml）；`BandEvaluatorTest` 覆盖区间判定、越界结果、intent 生成与 YAML 加载。集成侧（定时采集 + 指标源接入）作为后续 Follow-up。
+**已落地（2026-10-12 → 2026-10-13）**：`common-core` 新增 `monitor/` 包——
+- `Band.java`（阈值 POJO）、`BandsLoader`（SnakeYAML 解析 bands.yaml）、`BandEvaluator`（evaluate + generateIntent）；
+- `MetricSource`（指标读取接口）、`MonitorLoop`（驱动一轮闭环，越界则写 intent 文件）、`DemoMetricSource`（演示实现）；
+- 测试：`BandEvaluatorTest` + `MonitorLoopTest`（验证越界→生成 intent、无越界→不生成）。
+- `README.md` 已补充「CI 门禁激活 + 监控闭环接入」章节与 `@Scheduled` 接入示例；DB 表清单同步为 16 张。
+- 集成侧（定时采集 + 真实指标源）已给出可复制示例，落地即把 `MetricSource.sample()` 接到 Prometheus/Micrometer 即可。
 
 ---
 
