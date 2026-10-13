@@ -35,6 +35,11 @@ jobs:
       - name: Run tests (allow modules without tests)
         run: mvn -B test -DfailIfNoTests=false
 
+      - name: JaCoCo coverage report & gate
+        # prepare-agent 已在 test 阶段采集数据；此处生成报告并执行软门槛 check。
+        # 当前 haltOnFailure=false（不阻断）；待基线测出后调高 minimum 并改为 true。
+        run: mvn -B jacoco:report jacoco:check
+
   # ---------- 分层 AI 审查（可选，默认关闭，避免缺密钥导致红） ----------
   review:
     name: Layered AI Review
