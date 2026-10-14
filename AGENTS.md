@@ -41,7 +41,7 @@
 | smart-parking-notify | 8086 | notification | 通知 |
 | smart-parking-device | 8087 | device | 设备/MQTT/道闸 |
 | smart-parking-stats | 8088 | parking_stats | 统计（Redis Sorted Set 实时 + MQ 落库） |
-| smart-parking-ai | 8090 | — | 车牌识别增强 / 智能客服（已在 `计划书.md` 登记；当前为 mock 脚手架，百度/豆包真实接入待补） |
+| smart-parking-ai | 8090 | — | 车牌识别增强（百度 OCR 真实接入，provider=baidu 需配 AK/SK，缺省降级 mock）/ 智能客服（已在 `计划书.md` 登记；豆包真实接入待补，默认本地关键词 mock） |
 | smart-parking-common-* | — | — | core(Result/PageResult/AES/脱敏/异常) / redis / swagger |
 
 > **跨服务数据访问铁律**：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须用 OpenFeign 调 `/internal/**` 接口，网关不对外暴露 `/internal/**`。
@@ -103,6 +103,6 @@ mvn -B -pl smart-parking-order -am test -DfailIfNoTests=false
 
 - 🔴 **集成/API 测试近乎为零**：仅有 ~10 个纯逻辑单测；`user / notify / device / stats / ai` 模块零测试，全仓此前无 `@WebMvcTest`/`@SpringBootTest` 集成测试。CI 用 `mvn test -DfailIfNoTests=false`，无测试模块会"假绿"，且无 JaCoCo 覆盖率硬门槛（已加软门槛，待硬化）。
 - 🟢 **Phase D 监控闭环已接线且业务埋点已完成**：`stats` + `gateway/order/payment/parking/device` 五个服务均接入 `actuator`+`micrometer-registry-prometheus` 暴露 `/actuator/prometheus`（带 `application` 标签）；`common-core` 的 `PrometheusMetricSource` 调 Prometheus `/api/v1/query`（无数据返回 `NaN` 不误报）；`MonitorAutoConfiguration` 周期驱动 `MonitorLoop` 评估 `bands.yaml`，越界写 `intent-*.md`；`docker-compose` 已加 `prometheus`+`grafana`。业务埋点：`payment_recon_diff_amount`(PaymentReconMetrics)、`space_cache_miss_rate_pct`(ParkingCacheMetrics)、`device_offline_rate_pct`(DeviceOnlineMetrics)、`mq_order_backlog`/`mysql_active_connections`(OrderBusinessMetrics) 四个手写 Gauge，HTTP 延迟/错误率由 Actuator 自动提供。闭环现可产出真实告警。
-- 🟠 **`smart-parking-ai` 是 mock 脚手架**：`PlateController.callBaiduApi()` 写死返回、百度识别路径未实现；`ChatController` 仅配置豆包+key 才走真模型，默认本地关键词 mock。
+- 🟡 **`smart-parking-ai` 部分接入**：车牌识别已真实接入百度 OCR（`BaiduPlateService` 调 `aip.baidubce.com/rest/2.0/ocr/v1/license_plate`，AK/SK 未配置或调用异常自动降级本地 mock）；智能客服 `ChatController` 仍仅配置豆包+key 才走真模型，默认本地关键词 mock。
 - 🟠 **无 DB 迁移工具**：仅 `mapper/init.sql`+`data.sql` 手工导入，无 Flyway/Liquibase；跨服务 Feign `/internal` 调用无契约测试保障。
 - 🟠 **可观测性仍缺项**：业务指标埋点已完成，但**缺分布式追踪、健康检查/探针(Liveness/Readiness)、K8s 部署清单**；`docker-compose` 只编排基础设施（MySQL/Redis/Nacos/RabbitMQ/Prometheus/Grafana）未编排微服务本身（本地起服务仍需逐个手动启动）。
