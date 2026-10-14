@@ -102,7 +102,7 @@ mvn -B -pl smart-parking-order -am test -DfailIfNoTests=false
 > 最近评估：2026-10-13。构建已全绿、CI 已激活、`bands.yaml` 骨架已落地；以下为**仍待解决**的真实缺口（勿与已关闭项混淆）。
 
 - 🔴 **集成/API 测试近乎为零**：仅有 ~10 个纯逻辑单测；`user / notify / device / stats / ai` 模块零测试，全仓此前无 `@WebMvcTest`/`@SpringBootTest` 集成测试。CI 用 `mvn test -DfailIfNoTests=false`，无测试模块会"假绿"，且无 JaCoCo 覆盖率硬门槛（已加软门槛，待硬化）。
-- 🟠 **Phase D 监控未真正接线**：`bands.yaml` 无运行服务消费；`docker-compose` 无 Prometheus/Grafana；`DemoMetricSource` 恒返 0.0，闭环仅为骨架。
+- 🟢 **Phase D 监控闭环已接线且业务埋点已完成**：`stats` + `gateway/order/payment/parking/device` 五个服务均接入 `actuator`+`micrometer-registry-prometheus` 暴露 `/actuator/prometheus`（带 `application` 标签）；`common-core` 的 `PrometheusMetricSource` 调 Prometheus `/api/v1/query`（无数据返回 `NaN` 不误报）；`MonitorAutoConfiguration` 周期驱动 `MonitorLoop` 评估 `bands.yaml`，越界写 `intent-*.md`；`docker-compose` 已加 `prometheus`+`grafana`。业务埋点：`payment_recon_diff_amount`(PaymentReconMetrics)、`space_cache_miss_rate_pct`(ParkingCacheMetrics)、`device_offline_rate_pct`(DeviceOnlineMetrics)、`mq_order_backlog`/`mysql_active_connections`(OrderBusinessMetrics) 四个手写 Gauge，HTTP 延迟/错误率由 Actuator 自动提供。闭环现可产出真实告警。
 - 🟠 **`smart-parking-ai` 是 mock 脚手架**：`PlateController.callBaiduApi()` 写死返回、百度识别路径未实现；`ChatController` 仅配置豆包+key 才走真模型，默认本地关键词 mock。
 - 🟠 **无 DB 迁移工具**：仅 `mapper/init.sql`+`data.sql` 手工导入，无 Flyway/Liquibase；跨服务 Feign `/internal` 调用无契约测试保障。
-- 🟢 **可观测性缺项**：无分布式追踪、无健康检查/探针、无 K8s 部署清单；`docker-compose` 只编排基础设施未编排微服务本身。
+- 🟠 **可观测性仍缺项**：业务指标埋点已完成，但**缺分布式追踪、健康检查/探针(Liveness/Readiness)、K8s 部署清单**；`docker-compose` 只编排基础设施（MySQL/Redis/Nacos/RabbitMQ/Prometheus/Grafana）未编排微服务本身（本地起服务仍需逐个手动启动）。

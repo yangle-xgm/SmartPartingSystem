@@ -49,6 +49,19 @@ logging:
   level:
     com.smartparking: debug
 
+# ============ 可观测性：暴露 Prometheus 指标 ============
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 # ============ 自定义配置 ============
 smart-parking:
   # 支付超时补偿：待支付超过该分钟数即触发补偿（演示可调小为 1）

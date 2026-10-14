@@ -155,7 +155,7 @@ smart-parking-system/
 | `MonitorLoop` | 驱动一轮闭环：逐条读数→判定→越界则写 intent 文件 |
 | `DemoMetricSource` | 演示实现，恒定返回 0.0（不触发越界），用于本地跑通流程 |
 
-**在任意服务模块接入（示例，用 `@Scheduled` 周期执行）：**
+**已在 `smart-parking-stats` 模块落地真实实现**（`monitor/MonitorAutoConfiguration` 周期驱动 + `common-core` 的 `PrometheusMetricSource` 对接 Prometheus）。该模块已暴露 `/actuator/prometheus` 并被 Prometheus 抓取，运行期加载 `bands.yaml`、按 `monitor.fixed-delay-ms`（默认 60s）轮询评估，越界且 `write_intent=true` 的指标自动把 `intent-<date>-<metric>.md` 写入 `monitor.output-dir`。以下为最小接入范式，供其它模块复用：
 
 ```java
 @Configuration
@@ -184,4 +184,52 @@ public class MonitorAutoConfiguration {
 生成的 `intent-*.md` 即下一轮「规划阶段」的需求输入，完成 **维护 → 规划** 的自动回流。
 
 > 详见 `docs/AI原生SDLC审计与落地报告.md` 与 `docs/sdlc/plan.md`（Phase A~E）。
+
+---
+
+## 可观测性：监控栈一键启动（Prometheus + Grafana）
+
+本项目已补齐监控闭环的“读数→评估→回流”全链路，并已完成**业务埋点**：
+
+- **指标采集**：`smart-parking-stats` 及各业务服务（`gateway / order / payment / parking / device`）均引入 `micrometer-registry-prometheus` + `spring-boot-starter-actuator`，暴露 `/actuator/prometheus`，所有指标统一带 `application` 标签。
+- **自动指标**：HTTP 延迟与错误率由 Actuator 自动暴露的 `http_server_requests_seconds`（Timer）提供，经 `histogram_quantile` 计算 p99 / 5xx 错误率。
+- **业务语义指标（手写埋点）**：
+  - `payment_recon_diff_amount`（payment，`PaymentReconMetrics`，对账差额，应恒为 0）
+  - `space_cache_miss_rate_pct`（parking，`ParkingCacheMetrics`，缓存未命中率）
+  - `device_offline_rate_pct`（device，`DeviceOnlineMetrics`，设备离线率）
+  - `mq_order_backlog` / `mysql_active_connections`（order，`OrderBusinessMetrics`，MQ 积压 / Druid 活跃连接）
+  - 各埋点组件以 `@Configuration @EnableScheduling` 自采样（JdbcTemplate / RedisTemplate / RabbitTemplate / DruidDataSource），并预留 `setXxx()` 供业务主动上报。
+- **真实指标源**：`common-core` 的 `PrometheusMetricSource` 调 Prometheus `/api/v1/query` 读取 `bands.yaml` 中各指标当前值（无数据/异常返回 `NaN`，不误报）。
+- **闭环驱动**：`MonitorAutoConfiguration` 周期性执行 `MonitorLoop.evaluateAll()`，越界自动生成 `intent-<date>-<metric>.md` 回流规划阶段。
+
+### 1. 启动监控栈
+
+```bash
+# 启动 Prometheus(9090) + Grafana(3000)，并抓取全部微服务的 actuator 端点
+docker-compose up -d prometheus grafana
+```
+
+> 抓取目标在 `prometheus/prometheus.yml` 中配置，已为 `gateway(8080)/order(8084)/payment(8085)/parking(8082)/device(8087)/stats(8088)` 各加一个 job（默认按 `host.docker.internal:<port>` 抓取宿主机上运行的服务）。若把这些服务也编排进 compose 网络，可改为服务名。
+
+### 2. 查看面板
+
+- Prometheus 查询：`http://localhost:9090`，可输入 `payment_recon_diff_amount`、`device_offline_rate_pct` 等业务指标，或 `histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application="smart-parking-gateway"}[5m])) by (le)) * 1000` 查网关 p99。
+- Grafana：`http://localhost:3000`，账号/密码 `admin/admin`；已预置 Prometheus 数据源与「SmartParking 监控总览」面板（数据源配置见 `grafana/provisioning/`）。
+
+### 3. 指标与阈值对照
+
+`bands.yaml` 的 `metric` 字段已是合法 PromQL（由 `PrometheusMetricSource` 直接提交查询），与各服务暴露的指标一一对应：
+
+| 指标（bands.yaml） | 来源 | 类型 |
+| --- | --- | --- |
+| `gateway_p99_latency_ms` | `http_server_requests_seconds` histogram | 自动 |
+| `gateway_error_rate_pct` | `http_server_requests_seconds_count` 5xx 占比 | 自动 |
+| `order_entry_p99_ms` / `order_create_error_rate_pct` | order 服务 HTTP 指标 | 自动 |
+| `payment_callback_p99_ms` | payment 服务 HTTP 指标 | 自动 |
+| `payment_recon_diff_amount` | `PaymentReconMetrics` Gauge | 手写 |
+| `space_cache_miss_rate_pct` | `ParkingCacheMetrics` Gauge | 手写 |
+| `mq_order_backlog` / `mysql_active_connections` | `OrderBusinessMetrics` Gauge | 手写 |
+| `device_offline_rate_pct` | `DeviceOnlineMetrics` Gauge | 手写 |
+
+> 手写 Gauge 的采样 SQL 依赖 `payment_reconciliation` / `parking_space` / `device` 等表结构与字段命名；若与你的实际 schema 不符，采样会安全失败（保持上一次值，不误报），按需调整 `monitor/` 包下的 SQL 即可。
 

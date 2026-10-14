@@ -66,3 +66,16 @@ smart-parking:
   parking-url: http://localhost:8082
   # 用户服务地址（操作审计）
   audit-url: http://localhost:8081
+
+# ============ 可观测性：暴露 Prometheus 指标 ============
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

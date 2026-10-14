@@ -1,51 +1,56 @@
 # bands.yaml — 核心业务指标可接受区间（维护阶段工件）
 # 工件来源：AI 原生 SDLC「维护阶段」。监控越界即自动生成 intent.md，回流到规划阶段形成闭环。
 # action: open_incident=告警工单；page_oncall=呼叫值守；write_intent=true 时自动写需求文件
+#
+# 说明：metric 字段现为一行合法 PromQL，由 smart-parking-stats 的 PrometheusMetricSource
+# 直接提交给 Prometheus /api/v1/query 执行。application 标签由各服务
+# management.metrics.tags.application 注入；延迟类指标由 Actuator 自动暴露的
+# http_server_requests_seconds histogram 经 histogram_quantile 计算，并 ×1000 换算为 ms。
 
 # ---------- 网关 / 入口 ----------
-- metric: gateway_p99_latency_ms
+- metric: 'histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application="smart-parking-gateway"}[5m])) by (le)) * 1000'
   service: smart-parking-gateway
-  band: [0, 800]            # 非功能需求：系统响应 < 2s，网关侧留余量
+  band: [0, 800]            # 非功能需求：系统响应 < 2s，网关侧留余量；单位 ms
   on_breach:
     severity: high
     action: open_incident
     write_intent: true
 
-- metric: gateway_error_rate_pct
+- metric: 'sum(rate(http_server_requests_seconds_count{application="smart-parking-gateway",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{application="smart-parking-gateway"}[5m])) * 100'
   service: smart-parking-gateway
-  band: [0, 1.0]
+  band: [0, 1.0]            # 网关 5xx 错误率 %
   on_breach:
     severity: critical
     action: page_oncall
     write_intent: true
 
 # ---------- 订单（入场/出场，最高频写路径） ----------
-- metric: order_entry_p99_ms
+- metric: 'histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application="smart-parking-order"}[5m])) by (le)) * 1000'
   service: smart-parking-order
-  band: [0, 200]            # 计划书要求入场同步 < 200ms
+  band: [0, 200]            # 计划书要求入场同步 < 200ms；单位 ms
   on_breach:
     severity: high
     action: open_incident
     write_intent: true
 
-- metric: order_create_error_rate_pct
+- metric: 'sum(rate(http_server_requests_seconds_count{application="smart-parking-order",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{application="smart-parking-order"}[5m])) * 100'
   service: smart-parking-order
-  band: [0, 0.5]
+  band: [0, 0.5]            # 订单创建 5xx 错误率 %
   on_breach:
     severity: critical
     action: page_oncall
     write_intent: true
 
 # ---------- 支付（高危，必须人工终审相关故障） ----------
-- metric: payment_callback_p99_ms
+- metric: 'histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application="smart-parking-payment"}[5m])) by (le)) * 1000'
   service: smart-parking-payment
-  band: [0, 1000]
+  band: [0, 1000]           # 支付回调 p99；单位 ms
   on_breach:
     severity: high
     action: open_incident
     write_intent: true
 
-- metric: payment_recon_diff_amount
+- metric: 'max(payment_recon_diff_amount{application="smart-parking-payment"})'
   service: smart-parking-payment
   band: [0, 0]             # 对账差额必须为 0，非 0 即异常
   on_breach:
@@ -54,35 +59,35 @@
     write_intent: true
 
 # ---------- 车位状态缓存一致性 ----------
-- metric: space_cache_miss_rate_pct
+- metric: 'max(space_cache_miss_rate_pct{application="smart-parking-parking"})'
   service: smart-parking-parking
-  band: [0, 20]
+  band: [0, 20]             # 缓存未命中率 %
   on_breach:
     severity: medium
     action: open_incident
     write_intent: false
 
 # ---------- 消息队列积压（最终一致性关键） ----------
-- metric: mq_order_backlog
-  service: rabbitmq
-  band: [0, 500]
+- metric: 'max(mq_order_backlog{application="smart-parking-order"})'
+  service: smart-parking-order
+  band: [0, 500]             # 订单 MQ 积压消息数
   on_breach:
     severity: high
     action: page_oncall
     write_intent: true
 
 # ---------- 设备在线率（道闸/摄像头/地磁） ----------
-- metric: device_offline_rate_pct
+- metric: 'max(device_offline_rate_pct{application="smart-parking-device"})'
   service: smart-parking-device
-  band: [0, 2.0]
+  band: [0, 2.0]             # 设备离线率 %
   on_breach:
     severity: high
     action: open_incident
     write_intent: true
 
 # ---------- 数据库可用连接 ----------
-- metric: mysql_active_connections
-  service: smart_parking
+- metric: 'max(mysql_active_connections{application="smart-parking-order"})'
+  service: smart-parking-order
   band: [0, 80]             # 以最大连接数的 80% 为安全水位
   on_breach:
     severity: high
