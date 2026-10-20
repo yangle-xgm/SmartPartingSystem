@@ -26,5 +26,9 @@ ai:
   # 智能客服：doubao / mock
   chat:
     provider: mock
+    # 火山方舟 API Key（console.volcengine.com/ark → API 密钥管理）
     doubao-api-key: ""
-    doubao-model: "doubao-pro-4k"
+    # 推理接入点 ID，格式 ep-xxxx（chat/completions 的 model 字段必须填这个，不是模型名）
+    doubao-endpoint-id: ""
+    # 可选：自定义接入点域名，默认北京地域
+    doubao-base-url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"

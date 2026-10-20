@@ -2,21 +2,20 @@ package com.smartparking.ai.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartparking.ai.service.DoubaoChatService;
 import com.smartparking.common.core.domain.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * 智能客服：接入豆包大模型API
+ * 智能客服：接入豆包（火山方舟）大模型 API，未配置或调用失败时降级本地关键词 mock。
  */
 @Slf4j
 @Tag(name = "AI智能客服", description = "自然语言问答（豆包大模型）")
@@ -28,51 +27,50 @@ public class ChatController {
     @Value("${ai.chat.provider:mock}")
     private String provider;
 
-    @Value("${ai.chat.doubao-api-key:}")
-    private String doubaoApiKey;
+    @Value("${ai.chat.doubao-endpoint-id:}")
+    private String doubaoEndpointId;
 
-    @Value("${ai.chat.doubao-model:doubao-pro-4k}")
-    private String doubaoModel;
-
-    private static final String DOUBAO_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final DoubaoChatService doubaoChatService;
 
     @Operation(summary = "智能客服问答")
     @PostMapping
-    public Result<Map<String, String>> chat(@RequestBody Map<String, String> body) {
-        String question = body.getOrDefault("question", "");
+    public Result<Map<String, String>> chat(@RequestBody Map<String, Object> body) {
+        String question = (String) body.getOrDefault("question", "");
+        List<Map<String, String>> history = extractHistory(body);
+
         String answer;
-        if ("doubao".equals(provider) && doubaoApiKey != null && !doubaoApiKey.isEmpty()) {
+        String effectiveProvider = provider;
+        if ("doubao".equals(provider) && doubaoChatService.isConfigured()) {
             try {
-                answer = callDoubao(question);
+                answer = doubaoChatService.chat(history, question);
             } catch (Exception e) {
-                log.warn("豆包API调用失败，降级到本地: {}", e.getMessage());
+                log.warn("豆包调用失败，降级本地 mock: {}", e.getMessage());
                 answer = mockAnswer(question);
+                effectiveProvider = "mock(fallback)";
             }
         } else {
             answer = mockAnswer(question);
         }
-        return Result.success(Map.of("answer", answer, "provider", provider));
+        return Result.success(Map.of(
+                "answer", answer,
+                "provider", effectiveProvider,
+                "model", "doubao".equals(provider) ? doubaoEndpointId : "local-mock"
+        ));
     }
 
-    private String callDoubao(String question) throws Exception {
-        Map<String, Object> sysMsg = Map.of("role", "system", "content",
-                "你是小区智慧停车系统的智能客服助手。请简洁回答用户关于停车缴费、访客邀请、车位预约、月卡续费、车辆管理等问题。回答不超过100字。");
-        Map<String, Object> userMsg = Map.of("role", "user", "content", question);
-        Map<String, Object> reqBody = Map.of(
-                "model", doubaoModel,
-                "messages", List.of(sysMsg, userMsg),
-                "temperature", 0.7,
-                "max_tokens", 300
-        );
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(doubaoApiKey);
-        ResponseEntity<String> resp = restTemplate.exchange(DOUBAO_URL, HttpMethod.POST,
-                new HttpEntity<>(MAPPER.writeValueAsString(reqBody), headers), String.class);
-        JsonNode root = MAPPER.readTree(resp.getBody());
-        return root.path("choices").path(0).path("message").path("content").asText();
+    @SuppressWarnings("unchecked")
+    private List<Map<String, String>> extractHistory(Map<String, Object> body) {
+        Object raw = body.get("history");
+        if (raw instanceof List) {
+            try {
+                return MAPPER.convertValue(raw,
+                        MAPPER.getTypeFactory().constructCollectionType(List.class, Map.class));
+            } catch (Exception ignored) {
+                return List.of();
+            }
+        }
+        return List.of();
     }
 
     private String mockAnswer(String q) {
