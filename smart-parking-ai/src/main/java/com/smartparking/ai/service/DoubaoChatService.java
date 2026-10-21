@@ -3,6 +3,7 @@ package com.smartparking.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.http.converter.StringHttpMessageConverter;
@@ -43,6 +44,8 @@ public class DoubaoChatService {
     private final String baseUrl;
     private final String systemPrompt;
 
+    /** Spring 使用的主构造器：显式标注 @Autowired，与包级测试构造器共存时消除歧义。 */
+    @Autowired
     public DoubaoChatService(
             @Value("${ai.chat.doubao-api-key:}") String apiKey,
             @Value("${ai.chat.doubao-endpoint-id:}") String endpointId,
