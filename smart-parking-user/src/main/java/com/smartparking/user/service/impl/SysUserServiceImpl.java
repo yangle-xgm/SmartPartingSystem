@@ -10,6 +10,7 @@ import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.user.dto.RegisterDTO;
 import com.smartparking.user.dto.UserUpdateDTO;
 import com.smartparking.user.mapper.SysUserMapper;
+import com.smartparking.user.monitor.UserAuthMetrics;
 import com.smartparking.user.po.SysUser;
 import com.smartparking.user.query.SysUserQuery;
 import com.smartparking.user.service.AuditLogService;
@@ -34,6 +35,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
     private final AuditLogService auditLogService;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+    private final UserAuthMetrics userAuthMetrics;
 
     @Override
     public UserVO register(RegisterDTO dto) {
@@ -58,6 +60,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         user.setStatus(1);
 
         this.save(user);
+        userAuthMetrics.onRegister();
         auditLogService.record(user.getId(), user.getUsername(), "注册", "POST /api/user/register",
                 "{\"username\":\"" + user.getUsername() + "\"}", true, null, null);
         return UserVO.from(user);
@@ -92,11 +95,13 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             auditLogService.record(user.getId(), user.getUsername(), "登录", "POST /api/user/login",
                     "{\"username\":\"" + username + "\"}", true, null, null);
             Map<String, String> tokens = new HashMap<>();
+            userAuthMetrics.onLoginSuccess();
             Long communityId = user.getCommunityId() != null ? user.getCommunityId() : 1L;
             tokens.put("accessToken", JwtUtils.generateToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             tokens.put("refreshToken", JwtUtils.generateRefreshToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             return tokens;
         } catch (RuntimeException e) {
+            userAuthMetrics.onLoginFail();
             auditLogService.record(null, username, "登录", "POST /api/user/login",
                     "{\"username\":\"" + username + "\",\"reason\":\"" + e.getMessage() + "\"}",
                     false, null, null);

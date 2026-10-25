@@ -6,6 +6,7 @@ import com.smartparking.common.core.utils.AesUtils;
 import com.smartparking.vehicle.client.AuditClient;
 import com.smartparking.vehicle.dto.RecognizeResult;
 import com.smartparking.vehicle.mapper.VehicleMapper;
+import com.smartparking.vehicle.monitor.VehicleStatsMetrics;
 import com.smartparking.vehicle.po.Vehicle;
 import com.smartparking.vehicle.service.VehicleService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ import java.util.List;
 public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> implements VehicleService {
 
     private final AuditClient auditClient;
+    private final VehicleStatsMetrics vehicleStatsMetrics;
 
     @Override
     public List<Vehicle> listByUserId(Long userId) {
@@ -64,6 +66,7 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
         }
 
         this.save(vehicle);
+        vehicleStatsMetrics.onBind();
 
         // 操作审计：绑定车辆
         auditClient.record(vehicle.getOwnerId(), null, "绑定车辆", "POST /api/vehicle/bind",

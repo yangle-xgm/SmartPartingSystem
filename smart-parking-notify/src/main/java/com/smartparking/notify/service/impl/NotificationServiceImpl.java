@@ -5,10 +5,12 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartparking.notify.mapper.NotificationMapper;
+import com.smartparking.notify.monitor.NotificationMetrics;
 import com.smartparking.notify.po.Notification;
 import com.smartparking.notify.query.NotificationQuery;
 import com.smartparking.notify.service.NotificationService;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
@@ -16,7 +18,10 @@ import org.springframework.stereotype.Service;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification> implements NotificationService {
+
+    private final NotificationMetrics notificationMetrics;
 
     @Override
     public void sendNotification(Long userId, String title, String content, Integer type) {
@@ -25,11 +30,16 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         notification.setTitle(title);
         notification.setContent(content);
         notification.setType(type);
-        notification.setIsRead(userId == 1L ? 1 : 0); // admin发的广播对admin自己标记为已读
+        boolean broadcast = userId != null && userId == 1L;
+        notification.setIsRead(broadcast ? 1 : 0); // admin发的广播对admin自己标记为已读
         notification.setCreateTime(java.time.LocalDateTime.now());
         notification.setUpdateTime(java.time.LocalDateTime.now());
 
         this.save(notification);
+        notificationMetrics.onSent(type);
+        if (broadcast) {
+            notificationMetrics.onBroadcast();
+        }
         log.info("发送通知成功：userId={}, title={}", userId, title);
     }
 

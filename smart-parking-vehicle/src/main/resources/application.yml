@@ -1,3 +1,20 @@
+# ============ 可观测性（actuator + prometheus） ============
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 spring:
   flyway:
     # 默认关闭：避免 CI/本地无 DB 时启动失败；生产在 prod profile 或 Nacos 开启

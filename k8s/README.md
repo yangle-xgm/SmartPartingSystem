@@ -50,8 +50,11 @@ kubectl -n smart-parking get pods -w
    每模块独立迁移（`schema_history_<模块>` 表 + `classpath:db/migration`），CI/本地仍默认关闭。
 2. **服务间调用**：客户端（AuditClient/ParkingSpaceClient 等）的 `smart-parking.*-url` 缺省值是 localhost，
    K8s 里由 `common.yml` 覆盖为集群 Service DNS；`/internal/**` 仅集群内可达（Ingress 不暴露，符合网关白名单契约）。
-3. **健康检查**：当前多数业务模块未接 actuator，统一用 TCP 探针；后续接入 actuator 后可升级为
-   `httpGet /actuator/health`（order/payment/parking/device/stats/gateway 已具备）。
+3. **健康检查**：actuator 全覆盖（10 个微服务全部接入），探针已升级为真正的健康检查：
+   - `livenessProbe` → `httpGet /actuator/health/liveness`（只查应用本身，DB/MQ 抖动不误杀 Pod）
+   - `readinessProbe` → `httpGet /actuator/health/readiness`（查 DB/Redis/MQ/Nacos 依赖，未就绪不接流量）
+   - 分组端点由 `management.endpoint.health.probes.enabled=true` 开启（各模块 application.yml 已统一配置）
+   - 冷启动兜底：`initialDelaySeconds` 45s / `failureThreshold` 4（Spring Boot 3.2 冷启动约 40~60s）
 4. **资源配置**：requests 250m/512Mi、limits 1000m/1Gi，按需调整。
 
 ## 待办（超出清单范围）
@@ -59,3 +62,4 @@ kubectl -n smart-parking get pods -w
 - HPA 自动扩缩（基于 CPU/自定义指标）
 - PDB（Pod 反亲和与中断预算）
 - NetworkPolicy（限制 /internal 仅集群内互调）
+- 分布式追踪（Micrometer Tracing，补齐可观测性最后一块）
