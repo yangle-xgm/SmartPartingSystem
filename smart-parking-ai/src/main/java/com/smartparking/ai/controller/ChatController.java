@@ -3,6 +3,7 @@ package com.smartparking.ai.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartparking.ai.service.DoubaoChatService;
+import com.smartparking.ai.monitor.AiCallMetrics;
 import com.smartparking.common.core.domain.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,6 +33,7 @@ public class ChatController {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final DoubaoChatService doubaoChatService;
+    private final AiCallMetrics aiCallMetrics;
 
     @Operation(summary = "智能客服问答")
     @PostMapping
@@ -44,13 +46,16 @@ public class ChatController {
         if ("doubao".equals(provider) && doubaoChatService.isConfigured()) {
             try {
                 answer = doubaoChatService.chat(history, question);
+                aiCallMetrics.onRealCall("chat");
             } catch (Exception e) {
                 log.warn("豆包调用失败，降级本地 mock: {}", e.getMessage());
                 answer = mockAnswer(question);
+                aiCallMetrics.onMockFallback("chat");
                 effectiveProvider = "mock(fallback)";
             }
         } else {
             answer = mockAnswer(question);
+            aiCallMetrics.onMockFallback("chat");
         }
         return Result.success(Map.of(
                 "answer", answer,

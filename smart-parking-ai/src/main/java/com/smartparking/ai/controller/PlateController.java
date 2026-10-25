@@ -2,10 +2,12 @@ package com.smartparking.ai.controller;
 
 import com.smartparking.ai.service.BaiduPlateService;
 import com.smartparking.ai.service.PlateRecognition;
+import com.smartparking.ai.monitor.AiCallMetrics;
 import com.smartparking.common.core.domain.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +25,11 @@ import java.util.Map;
 @Slf4j
 @Tag(name = "AI车牌识别", description = "上传图片识别车牌号")
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/ai/plate")
 public class PlateController {
+
+    private final AiCallMetrics aiCallMetrics;
 
     @Value("${ai.plate.provider:mock}")
     private String provider;
@@ -59,21 +64,25 @@ public class PlateController {
         if ("baidu".equals(provider) && baiduPlateService.isConfigured()) {
             try {
                 PlateRecognition r = baiduPlateService.recognize(file.getBytes());
+                aiCallMetrics.onRealCall("plate");
                 plateNo = r.number();
                 confidence = r.confidence();
                 plateColor = r.color();
             } catch (java.io.IOException e) {
                 log.warn("读取上传文件字节失败，降级到模拟模式: {}", e.getMessage());
+                aiCallMetrics.onMockFallback("plate");
                 var mock = mockResult();
                 plateNo = mock.plateNo;
                 confidence = mock.confidence;
             } catch (Exception e) {
                 log.warn("百度车牌识别调用失败，降级到模拟模式: {}", e.getMessage());
+                aiCallMetrics.onMockFallback("plate");
                 var mock = mockResult();
                 plateNo = mock.plateNo;
                 confidence = mock.confidence;
             }
         } else {
+            aiCallMetrics.onMockFallback("plate");
             var mock = mockResult();
             plateNo = mock.plateNo;
             confidence = mock.confidence;
