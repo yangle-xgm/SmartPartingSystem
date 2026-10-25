@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smart-parking-config
+  namespace: smart-parking
+data:
+  common.yml: |
+  smart-parking:
+    # 跨服务调用地址（集群内 Service DNS，替代 application.yml 的 localhost 缺省值）
+    audit-url: http://smart-parking-user:8081
+    parking-url: http://smart-parking-parking:8082
+    vehicle-url: http://smart-parking-vehicle:8083
+    order-url: http://smart-parking-order:8084
+    gateway-url: http://smart-parking-gateway:8080
+  spring:
+    flyway:
+      # K8s 环境启用 per-module Flyway 迁移（每模块独立 schema_history_<模块> 表）
+      enabled: true
+    cloud:
+      nacos:
+        discovery:
+          server-addr: ${NACOS_ADDR}
+        config:
+          server-addr: ${NACOS_ADDR}
+    datasource:
+      url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/smart_parking?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      username: root
+      password: ${MYSQL_PASSWORD}
+    data:
+      redis:
+        host: ${REDIS_HOST}
+        port: ${REDIS_PORT}
+    rabbitmq:
+      host: ${RABBITMQ_HOST}
+      port: ${RABBITMQ_PORT}

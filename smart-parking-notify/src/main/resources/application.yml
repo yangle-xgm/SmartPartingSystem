@@ -1,4 +1,10 @@
 spring:
+  flyway:
+    # 默认关闭：避免 CI/本地无 DB 时启动失败；生产在 prod profile 或 Nacos 开启
+    enabled: false
+    table: schema_history_notify
+    locations: classpath:db/migration
+    baseline-on-migrate: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3307/smart_parking?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true

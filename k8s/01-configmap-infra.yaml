@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smart-parking-infra
+  namespace: smart-parking
+data:
+  # 外部托管基础设施地址（云 RDS / 云 Redis / 云 MQ / 自建 Nacos），按实际环境修改
+  NACOS_ADDR: "nacos.internal:8848"
+  MYSQL_HOST: "mysql.internal"
+  MYSQL_PORT: "3306"
+  REDIS_HOST: "redis.internal"
+  REDIS_PORT: "6379"
+  RABBITMQ_HOST: "rabbitmq.internal"
+  RABBITMQ_PORT: "5672"
