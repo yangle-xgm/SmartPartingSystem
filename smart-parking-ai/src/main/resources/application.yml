@@ -1,0 +1,18 @@
+# ============ 可观测性（actuator + prometheus） ============
+# 注：本模块原有配置在 bootstrap.yml（server/spring.cloud.nacos/ai），此处仅补管理端点。
+# application.yml 与 bootstrap.yml 属性会合并加载，互不冲突。
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
