@@ -36,15 +36,18 @@ spec:
             - name: app-config
               mountPath: /config
               readOnly: true
-          # 探针：业务模块大多未接 actuator，用 TCP 探针保证通用（后续可升级 httpGet /actuator/health）
+          # 探针：actuator 全覆盖（smart-parking-* 全部接入）。
+          # liveness 只查应用本身（不查外部依赖，DB 抖动不误杀）；readiness 查 DB/Redis/MQ/Nacos 依赖，未就绪不接流量。
           readinessProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/readiness
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            tcpSocket:
+            httpGet:
+              path: /actuator/health/liveness
               port: http
             initialDelaySeconds: 45
             periodSeconds: 15
