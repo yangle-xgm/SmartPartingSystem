@@ -44,6 +44,14 @@ public enum ErrorCode {
     ORDER_ONGOING_EXISTS(5303, "该车辆已有进行中的订单"),
     ORDER_BILLING_RULE_MISSING(5304, "未找到适用的计费规则"),
 
+    // 访客邀请 53xx（E2E 报告 P2-1：原 RuntimeException 一律落 code=500）
+    INVITE_NOT_FOUND(5305, "邀请码不存在"),
+    INVITE_ALREADY_USED(5306, "邀请码已被使用"),
+    INVITE_CANCELLED(5307, "邀请码已作废"),
+    INVITE_EXPIRED(5308, "邀请码已过期"),
+    INVITE_NOT_WHITELISTED(5309, "该车牌不在访客白名单中"),
+    INVITE_LIMIT_EXCEEDED(5310, "访客邀请数量已达上限"),
+
     // 支付 54xx
     PAY_NOT_FOUND(5401, "支付记录不存在"),
     PAY_STATUS_ERROR(5402, "支付状态异常"),
@@ -56,7 +64,11 @@ public enum ErrorCode {
 
     // 设备 56xx
     DEVICE_NOT_FOUND(5601, "设备不存在"),
-    GATE_ERROR(5602, "道闸操作失败");
+    GATE_ERROR(5602, "道闸操作失败"),
+
+    // 通知 57xx
+    NOTIFICATION_NOT_FOUND(5701, "通知不存在"),
+    FEEDBACK_NOT_FOUND(5702, "反馈不存在");
 
     private final int code;
     private final String message;

@@ -23,7 +23,14 @@ public class UserVO {
     @Schema(description = "手机号（脱敏显示）")
     private String phoneMasked;
 
-    @Sensitive(type = "name")
+    /**
+     * 真实姓名。
+     *
+     * <p>E2E 报告 P2-2：此前此处挂 {@code @Sensitive(type="name")}，{@code /user/info} 返回"张*"，
+     * 而 profile/user 页面把该值回填输入框，保存即把真实姓名覆盖为掩码。
+     * 本 VO 的消费方均为有权限场景（{@code /user/info} 本人视角、{@code /user/list} 仅管理员），
+     * 故不脱敏；手机号另有 phoneMasked 显式掩码字段承接脱敏诉求。</p>
+     */
     @Schema(description = "真实姓名")
     private String realName;
 

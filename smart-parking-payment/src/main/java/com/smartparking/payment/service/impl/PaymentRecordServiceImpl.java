@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartparking.payment.client.AuditClient;
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.common.core.exception.BizException;
 import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.payment.mapper.PaymentRecordMapper;
@@ -82,6 +83,14 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             if (orderStatus == 2) { // 已取消
                 throw new BizException(ErrorCode.ORDER_STATUS_ERROR, "订单已取消，无法支付");
             }
+            // 金额以订单应付金额为准，忽略前端传值（E2E 报告 P0-5：此前任意 amount 均可支付成功）
+            BigDecimal orderAmount = data.get("amount") == null ? null
+                    : new BigDecimal(String.valueOf(data.get("amount")));
+            if (orderAmount == null || orderAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                // 0 元/负金额订单（免费时长内出场）不生成流水，直接拒绝
+                throw new BizException(ErrorCode.PAY_STATUS_ERROR, "订单无需支付");
+            }
+            amount = orderAmount;
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
@@ -227,7 +236,7 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             throw new BizException(ErrorCode.PAY_NOT_FOUND);
         }
 
-        record.setPayStatus(4); // 支付失败（独立状态，与已退款2区分）
+        record.setPayStatus(Constants.PAY_STATUS_FAILED); // 支付失败（独立状态，与已退款2/已关闭3区分）
         this.updateById(record);
     }
 

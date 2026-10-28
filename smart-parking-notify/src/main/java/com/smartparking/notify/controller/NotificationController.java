@@ -3,6 +3,8 @@ package com.smartparking.notify.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.notify.po.Notification;
 import com.smartparking.notify.query.NotificationQuery;
 import com.smartparking.notify.service.NotificationService;
@@ -105,8 +107,10 @@ public class NotificationController {
     public Result<PageResult<Notification>> list(NotificationQuery query,
             @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
             @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
-        // 业主(role=0)只能看自己的通知
-        if ("0".equals(currentRole) && currentUserId != null) {
+        // E2E 报告 P1-6/P2-6：任何角色都只返回"发给本人的 + 全体广播(userId=1)"。
+        // 此前仅业主(role=0)强制覆盖 userId，管理员不传 userId 时返回全站通知，
+        // 既把"我的通知"当成"通知管理"用，又泄露他人停车信息。
+        if (currentUserId != null) {
             query.setUserId(Long.valueOf(currentUserId));
         }
         Page<Notification> page = new Page<>(query.getCurrent(), query.getSize());
@@ -117,7 +121,16 @@ public class NotificationController {
 
     @Operation(summary = "标记已读")
     @PutMapping("/read/{id}")
-    public Result<Void> markAsRead(@PathVariable Long id) {
+    public Result<Void> markAsRead(@PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // E2E 报告 P1-6：业主只能已读自己的通知（广播通知 userId=1 对所有业主可见可读）
+        if ("0".equals(currentRole) && currentUserId != null) {
+            Notification n = notificationService.getById(id);
+            if (n != null && !Long.valueOf(currentUserId).equals(n.getUserId()) && !Long.valueOf(1L).equals(n.getUserId())) {
+                throw new BizException(ErrorCode.NOTIFICATION_NOT_FOUND, "无权操作该通知");
+            }
+        }
         notificationService.markAsRead(id);
         return Result.success();
     }
@@ -125,7 +138,13 @@ public class NotificationController {
     @Operation(summary = "全部已读")
     @PutMapping("/readAll")
     public Result<Void> markAllAsRead(
-            @Parameter(description = "用户ID") @RequestParam Long userId) {
+            @Parameter(description = "用户ID") @RequestParam Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // E2E 报告 P1-6：业主(role=0)忽略入参 userId，强制只已读本人的通知
+        if ("0".equals(currentRole) && currentUserId != null) {
+            userId = Long.valueOf(currentUserId);
+        }
         notificationService.markAllAsRead(userId);
         return Result.success();
     }
@@ -133,7 +152,13 @@ public class NotificationController {
     @Operation(summary = "未读数量")
     @GetMapping("/unread/count")
     public Result<Long> unreadCount(
-            @Parameter(description = "用户ID") @RequestParam Long userId) {
+            @Parameter(description = "用户ID") @RequestParam Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // E2E 报告 P1-6：业主(role=0)忽略入参 userId，强制只统计本人的未读
+        if ("0".equals(currentRole) && currentUserId != null) {
+            userId = Long.valueOf(currentUserId);
+        }
         long count = notificationService.getUnreadCount(userId);
         return Result.success(count);
     }

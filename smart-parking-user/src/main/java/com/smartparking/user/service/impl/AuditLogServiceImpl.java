@@ -23,6 +23,8 @@ import java.time.format.DateTimeFormatter;
 @RequiredArgsConstructor
 public class AuditLogServiceImpl extends ServiceImpl<AuditLogMapper, AuditLog> implements AuditLogService {
 
+    private final com.smartparking.user.mapper.SysUserMapper sysUserMapper;
+
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
@@ -31,7 +33,19 @@ public class AuditLogServiceImpl extends ServiceImpl<AuditLogMapper, AuditLog> i
         try {
             AuditLog auditLog = new AuditLog();
             auditLog.setUserId(userId);
-            auditLog.setUsername(username);
+            // E2E 报告 P2-11：多数调用方只传 userId 不传 username，审计列表"操作人"列空白。
+            // username 为空且有 userId 时回查 sys_user 补齐（回查失败不影响审计主流程）。
+            String effectiveUsername = username;
+            if (!StringUtils.hasText(effectiveUsername) && userId != null) {
+                try {
+                    com.smartparking.user.po.SysUser user = sysUserMapper.selectById(userId);
+                    if (user != null) {
+                        effectiveUsername = user.getUsername();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            auditLog.setUsername(effectiveUsername);
             auditLog.setOperation(operation);
             auditLog.setMethod(method);
             // 参数过长截断，避免撑爆TEXT

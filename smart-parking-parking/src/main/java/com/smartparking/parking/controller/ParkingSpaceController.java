@@ -3,6 +3,7 @@ package com.smartparking.parking.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.parking.po.ParkingSpace;
 import com.smartparking.parking.query.ParkingSpaceQuery;
 import com.smartparking.parking.service.ParkingSpaceService;
@@ -44,7 +45,7 @@ public class ParkingSpaceController {
     public Result<ParkingSpace> getDetail(@PathVariable Long id) {
         ParkingSpace space = parkingSpaceService.getById(id);
         if (space == null) {
-            return Result.fail("车位不存在");
+            return Result.fail(ErrorCode.SPACE_NOT_FOUND);
         }
         return Result.success(space);
     }
@@ -166,18 +167,26 @@ public class ParkingSpaceController {
         return Result.success();
     }
 
+    @Operation(summary = "车位占用汇总（内部接口，统计服务回填占用率使用）")
+    @GetMapping("/internal/occupancy-summary")
+    public Result<Map<String, Object>> occupancySummary(
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole,
+            @RequestHeader(value = "X-Community-Id", required = false) String communityId) {
+        Long community = resolveCommunityId(currentRole, communityId);
+        return Result.success(parkingSpaceService.getOccupancySummary(community));
+    }
+
     @Operation(summary = "查询车位共享信息（内部接口，支付分润使用）")
     @GetMapping("/internal/space-info/{id}")
     public Result<Map<String, Object>> spaceInfo(@PathVariable Long id) {
         ParkingSpace space = parkingSpaceService.getById(id);
         if (space == null) {
-            return Result.fail("车位不存在");
+            return Result.fail(ErrorCode.SPACE_NOT_FOUND);
         }
         Map<String, Object> info = new java.util.HashMap<>();
         info.put("id", space.getId());
         info.put("spaceNo", space.getSpaceNo());
         info.put("ownerId", space.getOwnerId());
         info.put("isShared", space.getIsShared() != null && space.getIsShared() == 1);
-        return Result.success(info);
-    }
+        return Result.success(info);    }
 }

@@ -3,6 +3,9 @@ package com.smartparking.order.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.ErrorCode;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.order.client.AuditClient;
 import com.smartparking.order.client.VehicleClient;
 import com.smartparking.order.po.ParkingOrder;
@@ -30,6 +33,7 @@ public class ParkingOrderController {
     private final ParkingOrderService parkingOrderService;
     private final AuditClient auditClient;
     private final VehicleClient vehicleClient;
+    private final com.smartparking.order.service.BillingRuleService billingRuleService;
 
     @Operation(summary = "车辆入场，创建订单")
     @PostMapping("/entry")
@@ -73,14 +77,30 @@ public class ParkingOrderController {
 
     @Operation(summary = "订单详情")
     @GetMapping("/{orderNo}")
-    public Result<ParkingOrder> detail(@PathVariable String orderNo) {
-        ParkingOrder order = parkingOrderService.lambdaQuery()
-                .eq(ParkingOrder::getOrderNo, orderNo)
-                .one();
+    public Result<ParkingOrder> detail(@PathVariable String orderNo,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        ParkingOrder order = parkingOrderService.getByOrderNo(orderNo);
         if (order == null) {
-            return Result.fail("订单不存在");
+            return Result.fail(ErrorCode.ORDER_NOT_FOUND);
         }
+        // E2E 报告 P1-5：业主(role=0)只能看自己车辆的订单，防遍历他人订单号
+        assertOrderReadable(order, currentUserId, currentRole);
         return Result.success(order);
+    }
+
+    /**
+     * 订单可读性校验：业主(role=0)的订单必须归属其名下车辆；管理员/超管不拦。
+     * 列表接口已做同样过滤（见 list），详情类接口此前漏掉。
+     */
+    private void assertOrderReadable(ParkingOrder order, String currentUserId, String currentRole) {
+        if (!"0".equals(currentRole) || currentUserId == null) {
+            return;
+        }
+        List<Long> ownerVehicleIds = vehicleClient.listVehicleIdsByOwner(Long.valueOf(currentUserId));
+        if (order.getVehicleId() == null || !ownerVehicleIds.contains(order.getVehicleId())) {
+            throw new BizException(ErrorCode.ORDER_NOT_FOUND, "无权查看该订单");
+        }
     }
 
     @Operation(summary = "获取当前停车中的订单")
@@ -94,7 +114,15 @@ public class ParkingOrderController {
     @Operation(summary = "实时计算停车费用")
     @GetMapping("/calculate")
     public Result<BigDecimal> calculate(
-            @Parameter(description = "订单编号") @RequestParam String orderNo) {
+            @Parameter(description = "订单编号") @RequestParam String orderNo,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // E2E 报告 P1-5：先按订单号取订单并校验归属，再算费（防他人订单号探测金额）
+        ParkingOrder order = parkingOrderService.getByOrderNo(orderNo);
+        if (order == null) {
+            throw new BizException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        assertOrderReadable(order, currentUserId, currentRole);
         BigDecimal amount = parkingOrderService.calculateAmount(orderNo);
         return Result.success(amount);
     }
@@ -104,6 +132,12 @@ public class ParkingOrderController {
     public Result<Void> cancel(@PathVariable String orderNo) {
         parkingOrderService.cancelOrder(orderNo);
         return Result.success();
+    }
+
+    @Operation(summary = "查询计费规则（对外只读，E2E 报告 P2-5：billing_rule 此前无任何对外接口）")
+    @GetMapping("/billing-rules")
+    public Result<List<com.smartparking.order.po.BillingRule>> billingRules() {
+        return Result.success(billingRuleService.list());
     }
 
     // ==================== 内部接口 ====================

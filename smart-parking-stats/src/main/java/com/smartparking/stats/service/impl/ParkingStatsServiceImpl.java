@@ -37,6 +37,9 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
     @Value("${smart-parking.payment-url:http://localhost:8085}")
     private String paymentUrl;
 
+    @Value("${smart-parking.parking-url:http://localhost:8082}")
+    private String parkingUrl;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     private static final String DASHBOARD_KEY = "smart:parking:stats:dashboard";
@@ -164,10 +167,45 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
             }
         }
 
+        // E2E 报告 P1-2：占用率统计恒为 0 —— 新建行时 totalSpaces/occupiedSpaces 置 0 后再无回填。
+        // 每次更新都从车位服务拉真实车位数/占用数覆盖（失败保持原值，不误报）。
+        backfillSpaceCounts(stats);
+
         this.saveOrUpdate(stats);
 
-        // 清除缓存
+        // 清除缓存（占用率缓存键带日期后缀，需 keys 通配匹配；delete 单键不支持 *）
         redisTemplate.delete(DASHBOARD_KEY);
+        try {
+            java.util.Set<String> occupancyKeys = redisTemplate.keys(OCCUPANCY_KEY + ":*");
+            if (occupancyKeys != null && !occupancyKeys.isEmpty()) {
+                redisTemplate.delete(occupancyKeys);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 从车位服务回填总车位数与占用车位数（内部接口 /api/parking/internal/occupancy-summary）。
+     * 失败时保持原值，避免统计服务被车位服务故障拖垮。
+     */
+    private void backfillSpaceCounts(ParkingStats stats) {
+        try {
+            java.util.Map<String, Object> resp = restTemplate.getForObject(
+                    parkingUrl + "/api/parking/internal/occupancy-summary", java.util.Map.class);
+            Object data = resp == null ? null : resp.get("data");
+            if (data instanceof java.util.Map<?, ?> m) {
+                Object total = m.get("total");
+                Object occupied = m.get("occupied");
+                if (total instanceof Number) {
+                    stats.setTotalSpaces(((Number) total).intValue());
+                }
+                if (occupied instanceof Number) {
+                    stats.setOccupiedSpaces(((Number) occupied).intValue());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("回填车位数/占用数失败，保持原值：{}", e.getMessage());
+        }
     }
 
     @SuppressWarnings("unchecked")

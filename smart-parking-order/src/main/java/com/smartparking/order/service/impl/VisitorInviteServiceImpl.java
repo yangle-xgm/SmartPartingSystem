@@ -3,6 +3,8 @@ package com.smartparking.order.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.common.core.utils.AesUtils;
 import com.smartparking.order.client.AuditClient;
 import com.smartparking.order.mapper.VisitorInviteMapper;
@@ -16,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
@@ -59,7 +62,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
     @Transactional(rollbackFor = Exception.class)
     public VisitorInvite createInvite(Long userId, String plateNo, Integer expireHours) {
         if (plateNo == null || plateNo.isBlank()) {
-            throw new RuntimeException("请填写访客车牌号");
+            throw new BizException(ErrorCode.PARAM_INVALID, "请填写访客车牌号");
         }
         // 邀请数量上限：同一业主未过期、未作废的进行中邀请最多 5 个
         long activeCount = this.count(new LambdaQueryWrapper<VisitorInvite>()
@@ -67,7 +70,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
                 .eq(VisitorInvite::getStatus, 0)
                 .gt(VisitorInvite::getExpireTime, LocalDateTime.now()));
         if (activeCount >= 5) {
-            throw new RuntimeException("进行中的访客邀请已达上限（5个），请先作废或等待过期");
+            throw new BizException(ErrorCode.INVITE_LIMIT_EXCEEDED);
         }
         int hours = expireHours == null || expireHours <= 0 ? 24 : expireHours;
 
@@ -93,22 +96,30 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
     @Transactional(rollbackFor = Exception.class)
     public ParkingOrder entryByInviteCode(String inviteCode) {
         if (inviteCode == null || inviteCode.isBlank()) {
-            throw new RuntimeException("请输入邀请码");
+            throw new BizException(ErrorCode.PARAM_INVALID, "请输入邀请码");
         }
         VisitorInvite invite = this.getOne(new LambdaQueryWrapper<VisitorInvite>()
                 .eq(VisitorInvite::getInviteCode, inviteCode.trim().toUpperCase()));
         if (invite == null) {
-            throw new RuntimeException("邀请码不存在");
+            throw new BizException(ErrorCode.INVITE_NOT_FOUND);
         }
         checkValid(invite, "邀请码");
         return doVisitorEntry(invite, "凭码入场");
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
+    /**
+     * 车牌命中白名单自动入场。
+     *
+     * <p>E2E 报告 P1-1：传播行为必须是 NOT_SUPPORTED —— 调用方 deviceEntry() 外层是
+     * {@code @Transactional}，若此处用默认 REQUIRED 加入外层事务，未注册车牌抛异常后
+     * Spring 将外层事务标记 rollback-only，外层 catch 后继续提交触发
+     * UnexpectedRollbackException（"Transaction rolled back because it has been marked as rollback-only"）。
+     * NOT_SUPPORTED 挂起外层事务独立运行，异常不污染外层，内部 DB 更新各自自动提交。</p>
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public ParkingOrder entryByPlateNo(String plateNo) {
         if (plateNo == null || plateNo.isBlank()) {
-            throw new RuntimeException("车牌号为空");
+            throw new BizException(ErrorCode.PARAM_INVALID, "车牌号为空");
         }
         String normalized = plateNo.trim().toUpperCase();
 
@@ -128,7 +139,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
             }
         }
         if (matched == null) {
-            throw new RuntimeException("该车牌不在访客白名单中");
+            throw new BizException(ErrorCode.INVITE_NOT_WHITELISTED);
         }
         return doVisitorEntry(matched, "车牌识别入场");
     }
@@ -138,15 +149,15 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
      */
     private void checkValid(VisitorInvite invite, String label) {
         if (invite.getStatus() == 1) {
-            throw new RuntimeException(label + "已被使用");
+            throw new BizException(ErrorCode.INVITE_ALREADY_USED);
         }
         if (invite.getStatus() == 3) {
-            throw new RuntimeException(label + "已作废");
+            throw new BizException(ErrorCode.INVITE_CANCELLED);
         }
         if (invite.getExpireTime() != null && invite.getExpireTime().isBefore(LocalDateTime.now())) {
             invite.setStatus(2);
             this.updateById(invite);
-            throw new RuntimeException(label + "已过期");
+            throw new BizException(ErrorCode.INVITE_EXPIRED);
         }
     }
 
@@ -157,7 +168,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
     private ParkingOrder doVisitorEntry(VisitorInvite invite, String channel) {
         String plateNo = AesUtils.decrypt(invite.getPlateNo());
         if (!StringUtils.hasText(plateNo)) {
-            throw new RuntimeException("访客车牌数据异常");
+            throw new BizException(ErrorCode.PARAM_INVALID, "访客车牌数据异常");
         }
 
         // 1. 绑定访客车辆（绑定到邀请业主名下，type=1）
@@ -166,7 +177,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
         // 2. 分配空闲车位
         Map<String, Object> space = findAvailableSpace();
         if (space == null) {
-            throw new RuntimeException("暂无空闲车位");
+            throw new BizException(ErrorCode.SPACE_FULL);
         }
         Long spaceId = Long.valueOf(String.valueOf(space.get("id")));
         String spaceNo = String.valueOf(space.get("spaceNo"));
@@ -192,10 +203,10 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
     public void invalidate(Long id, Long userId) {
         VisitorInvite invite = this.getById(id);
         if (invite == null) {
-            throw new RuntimeException("邀请记录不存在");
+            throw new BizException(ErrorCode.INVITE_NOT_FOUND);
         }
         if (!invite.getUserId().equals(userId)) {
-            throw new RuntimeException("无权操作此邀请码");
+            throw new BizException(ErrorCode.FORBIDDEN, "无权操作此邀请码");
         }
         invite.setStatus(3);
         this.updateById(invite);
@@ -233,7 +244,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
                 return code;
             }
         }
-        throw new RuntimeException("生成邀请码失败，请重试");
+        throw new BizException(ErrorCode.SYSTEM_ERROR, "生成邀请码失败，请重试");
     }
 
     /**
@@ -272,7 +283,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
             Map<String, Object> result = parseJson(body);
             Object data = result.get("data");
             if (data == null || result.get("code") == null || !"200".equals(String.valueOf(result.get("code")))) {
-                throw new RuntimeException("绑定访客车辆失败");
+                throw new BizException(ErrorCode.PARAM_INVALID, "绑定访客车辆失败");
             }
             Map<String, Object> dataMap = (Map<String, Object>) data;
             return Long.valueOf(String.valueOf(dataMap.get("id")));
@@ -280,7 +291,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
             throw e;
         } catch (Exception e) {
             log.error("绑定访客车辆失败：plateNo={}, err={}", plateNo, e.getMessage());
-            throw new RuntimeException("绑定访客车辆失败，请确认车牌未重复绑定");
+            throw new BizException(ErrorCode.PARAM_INVALID, "绑定访客车辆失败，请确认车牌未重复绑定");
         }
     }
 

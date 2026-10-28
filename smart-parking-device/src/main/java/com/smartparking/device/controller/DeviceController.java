@@ -3,6 +3,7 @@ package com.smartparking.device.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.device.po.Device;
 import com.smartparking.device.query.DeviceQuery;
 import com.smartparking.device.service.DeviceService;
@@ -39,7 +40,7 @@ public class DeviceController {
     public Result<Device> detail(@PathVariable Long id) {
         Device device = deviceService.getById(id);
         if (device == null) {
-            return Result.fail("设备不存在");
+            return Result.fail(ErrorCode.DEVICE_NOT_FOUND);
         }
         return Result.success(device);
     }

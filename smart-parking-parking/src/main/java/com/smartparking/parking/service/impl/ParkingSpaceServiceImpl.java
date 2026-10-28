@@ -15,6 +15,7 @@ import com.smartparking.parking.po.Reservation;
 import com.smartparking.parking.query.ParkingSpaceQuery;
 import com.smartparking.parking.service.ParkingSpaceService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -36,6 +37,10 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
     private final ReservationMapper reservationMapper;
 
     private static final String L1_STATS_KEY = "l1:parking:stats";
+
+    /** 预约时长上限（小时），E2E 报告 P1-4：与前端同源，后端同样拦截 */
+    @Value("${smart-parking.reserve-max-hours:2}")
+    private int reserveMaxHours;
 
     @Override
     public Page<ParkingSpace> pageList(Page<ParkingSpace> page, ParkingSpaceQuery query, Long communityId) {
@@ -79,6 +84,21 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
 
         // 更新Redis缓存
         updateRedisSpaceStatus(space);
+    }
+
+    @Override
+    public Map<String, Object> getOccupancySummary(Long communityId) {
+        long total = this.count(new LambdaQueryWrapper<ParkingSpace>()
+                .eq(ParkingSpace::getIsDeleted, 0)
+                .eq(communityId != null, ParkingSpace::getCommunityId, communityId));
+        long occupied = this.count(new LambdaQueryWrapper<ParkingSpace>()
+                .eq(ParkingSpace::getIsDeleted, 0)
+                .eq(ParkingSpace::getStatus, Constants.SPACE_STATUS_OCCUPIED)
+                .eq(communityId != null, ParkingSpace::getCommunityId, communityId));
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("total", total);
+        summary.put("occupied", occupied);
+        return summary;
     }
 
     @Override
@@ -151,6 +171,15 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
             }
             if (!e.isAfter(s)) {
                 throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "结束时间必须晚于开始时间");
+            }
+            // E2E 报告 P1-4：时长上限与"不得早于当前"此前只在前端校验，此处下沉到后端与前端同源。
+            // 上限配置化（默认 2 小时），前后端按同一把尺拦截；恰好等于上限放行，超过才拒绝。
+            if (java.time.Duration.between(s, e).toMinutes() > reserveMaxHours * 60L) {
+                throw new BizException(ErrorCode.SPACE_UNAVAILABLE,
+                        "预约时长不能超过 " + reserveMaxHours + " 小时");
+            }
+            if (s.isBefore(java.time.LocalDateTime.now())) {
+                throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "预约开始时间不得早于当前时间");
             }
             // 时段冲突：同一车位存在进行中预约且时段重叠 → 拒绝
             java.util.List<Reservation> conflicts = reservationMapper.selectList(

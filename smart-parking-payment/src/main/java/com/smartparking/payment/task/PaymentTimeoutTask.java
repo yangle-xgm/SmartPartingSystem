@@ -1,6 +1,7 @@
 package com.smartparking.payment.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.payment.client.AuditClient;
 import com.smartparking.payment.po.PaymentRecord;
 import com.smartparking.payment.service.PaymentRecordService;
@@ -19,7 +20,7 @@ import java.util.List;
  * 支付超时补偿定时任务（计划书5.4异常流程）
  *
  * 每60秒扫描"待支付"超过阈值的支付记录：
- * 1. 将支付记录标记为失败（pay_status=2）
+ * 1. 将支付记录标记为已关闭（pay_status=3 PAY_STATUS_CLOSED，与已退款2严格区分）
  * 2. 调用订单服务内部接口关闭对应订单、释放车位
  * 3. 记录操作审计
  */
@@ -71,8 +72,9 @@ public class PaymentTimeoutTask {
     }
 
     private void processTimeout(PaymentRecord record) {
-        // 1. 标记支付失败
-        record.setPayStatus(2);
+        // 1. 标记支付记录为"已关闭"（pay_status=3）。
+        //    E2E 报告 P0-6：此前复用 2（已退款）导致未付款超时单被计入"已退款金额"，退款统计虚增。
+        record.setPayStatus(Constants.PAY_STATUS_CLOSED);
         paymentRecordService.updateById(record);
 
         // 2. 通知订单服务关闭订单、释放车位

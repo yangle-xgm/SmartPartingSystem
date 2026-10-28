@@ -1,6 +1,7 @@
 package com.smartparking.vehicle.controller;
 
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.vehicle.dto.RecognizeResult;
 import com.smartparking.vehicle.po.Vehicle;
 import com.smartparking.vehicle.service.VehicleService;
@@ -62,7 +63,7 @@ public class VehicleController {
     public Result<Vehicle> getInfoByPlate(@PathVariable String plateNo) {
         Vehicle vehicle = vehicleService.getByPlateNo(plateNo);
         if (vehicle == null) {
-            return Result.fail("车辆未注册");
+            return Result.fail(ErrorCode.VEHICLE_NOT_FOUND);
         }
         return Result.success(vehicle);
     }

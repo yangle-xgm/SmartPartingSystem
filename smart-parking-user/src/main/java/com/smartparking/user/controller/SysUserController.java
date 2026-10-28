@@ -3,6 +3,7 @@ package com.smartparking.user.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.user.dto.LoginDTO;
 import com.smartparking.user.dto.RegisterDTO;
 import com.smartparking.user.dto.UserUpdateDTO;
@@ -60,8 +61,19 @@ public class SysUserController {
 
     @Operation(summary = "获取用户信息")
     @GetMapping("/info")
-    public Result<UserVO> getUserInfo(@Parameter(description = "用户ID") @RequestParam Long userId) {
-        return Result.success(sysUserService.getUserInfo(userId));
+    public Result<UserVO> getUserInfo(
+            @Parameter(description = "用户ID（业主可省略，取当前登录人）") @RequestParam(required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 业主只能查自己：忽略前端传入的 userId，杜绝越权查看他人资料
+        Long targetId = userId;
+        if ("0".equals(currentRole) && currentUserId != null) {
+            targetId = Long.valueOf(currentUserId);
+        }
+        if (targetId == null) {
+            return Result.fail(ErrorCode.PARAM_INVALID, "缺少 userId 参数");
+        }
+        return Result.success(sysUserService.getUserInfo(targetId));
     }
 
     @Operation(summary = "分页查询用户列表")
@@ -75,7 +87,13 @@ public class SysUserController {
 
     @Operation(summary = "更新用户信息")
     @PutMapping("/update")
-    public Result<Void> updateUser(@RequestBody UserUpdateDTO dto) {
+    public Result<Void> updateUser(@RequestBody UserUpdateDTO dto,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 业主只能修改自己的资料（管理端 role=1/2 不受限制）
+        if ("0".equals(currentRole) && currentUserId != null) {
+            dto.setId(Long.valueOf(currentUserId));
+        }
         sysUserService.updateUser(dto);
         return Result.success();
     }

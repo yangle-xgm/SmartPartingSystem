@@ -103,13 +103,13 @@ class ParkingInternalApiContractTest {
     }
 
     @Test
-    @DisplayName("GET /api/parking/internal/space-info/{id}：车位不存在时 code!=200 且 data 缺省（消费者跳过分润）")
+    @DisplayName("GET /api/parking/internal/space-info/{id}：车位不存在时 code=5201 且 data 缺省（消费者跳过分润）")
     void spaceInfo_notFound_returnsFailContract() throws Exception {
         when(parkingSpaceService.getById(9999L)).thenReturn(null);
 
         mockMvc.perform(get("/api/parking/internal/space-info/9999"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.code").value(5201))
                 .andExpect(jsonPath("$.message").value("车位不存在"))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
@@ -127,5 +127,20 @@ class ParkingInternalApiContractTest {
         mockMvc.perform(get("/api/parking/internal/space-info/1002"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.isShared").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/parking/internal/occupancy-summary：data 含 total/occupied 两个数字字段（stats 回填占用率依赖）")
+    void occupancySummary_returnsTotalAndOccupied() throws Exception {
+        when(parkingSpaceService.getOccupancySummary(null))
+                .thenReturn(java.util.Map.of("total", 87, "occupied", 12));
+
+        mockMvc.perform(get("/api/parking/internal/occupancy-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.total").value(87))
+                .andExpect(jsonPath("$.data.occupied").value(12));
+
+        verify(parkingSpaceService).getOccupancySummary(null);
     }
 }

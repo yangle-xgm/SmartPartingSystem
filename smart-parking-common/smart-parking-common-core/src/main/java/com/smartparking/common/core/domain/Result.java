@@ -1,5 +1,6 @@
 package com.smartparking.common.core.domain;
 
+import com.smartparking.common.core.exception.ErrorCode;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -41,6 +42,22 @@ public class Result<T> implements Serializable {
 
     public static <T> Result<T> fail(String message) {
         return fail(500, message);
+    }
+
+    /**
+     * 业务错误码失败（E2E 报告 P2-1：原 fail(String) 一律 code=500，
+     * 前端 CODE_MESSAGE 里为 5201/5301 准备的友好文案永不命中，统一改用 ErrorCode 枚举）
+     */
+    public static <T> Result<T> fail(ErrorCode errorCode) {
+        return fail(errorCode.getCode(), errorCode.getMessage());
+    }
+
+    /**
+     * 业务错误码 + 自定义提示：错误码取自枚举，提示信息按场景定制
+     * （如 PARAM_INVALID + "缺少 userId 参数"）。
+     */
+    public static <T> Result<T> fail(ErrorCode errorCode, String message) {
+        return fail(errorCode.getCode(), message);
     }
 
     public static <T> Result<T> fail(Integer code, String message) {

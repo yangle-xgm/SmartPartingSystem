@@ -150,6 +150,8 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             catch (Exception e) { log.error("发送入场MQ失败: {}", e.getMessage()); }
         });
 
+        // 返回前解密车牌（DB 中仍为密文）—— E2E 报告 P0-4：入场接口此前直接返回密文
+        order.setPlateNo(decryptPlateNo(order));
         return order;
     }
 
@@ -178,15 +180,16 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
         this.updateById(order);
 
-        // 远程操作移到提交后
+        // 远程操作移到提交后（车牌密文用于内部审计/MQ，返回前端时再解密）
         Long finalSpaceId = order.getSpaceId();
         LocalDateTime finalExitTime = exitTime;
         long finalMinutes = minutes;
         BigDecimal finalAmount = amount;
+        final String finalPlateCipher = order.getPlateNo();
         runAfterCommit(() -> {
             try {
                 auditClient.record(currentUserId(), null, "车辆出场", "POST /api/order/exit/{orderNo}",
-                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", order.getPlateNo(),
+                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", finalPlateCipher,
                                 "amount", finalAmount, "duration", finalMinutes), true);
             } catch (Exception e) { log.warn("出场审计失败: {}", e.getMessage()); }
             try { parkingSpaceClient.updateStatus(finalSpaceId, 0); }
@@ -195,7 +198,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             message.put("orderId", order.getId());
             message.put("orderNo", order.getOrderNo());
             message.put("vehicleId", order.getVehicleId());
-            message.put("plateNo", order.getPlateNo());
+            message.put("plateNo", finalPlateCipher);
             message.put("spaceId", finalSpaceId);
             message.put("exitTime", finalExitTime);
             message.put("duration", finalMinutes);
@@ -205,6 +208,8 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             catch (Exception e) { log.error("发送出场MQ失败: {}", e.getMessage()); }
         });
 
+        // 返回前端前解密车牌（订单表车牌是 AES 密文存储）
+        order.setPlateNo(decryptPlateNo(order));
         return order;
     }
 
@@ -230,8 +235,9 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
         wrapper.orderByDesc(ParkingOrder::getCreateTime);
         Page<ParkingOrder> result = this.page(page, wrapper);
-        // 车牌解密后返回前端展示
-        result.getRecords().forEach(ParkingOrderServiceImpl::decryptPlateNo);
+        // 车牌解密后返回前端展示（E2E 报告 P0-4：原方法引用 forEach(ParkingOrderServiceImpl::decryptPlateNo)
+        // 把 String 返回值当 Consumer 丢弃，对象密文未被替换）
+        result.getRecords().forEach(o -> o.setPlateNo(decryptPlateNo(o)));
         return result;
     }
 
@@ -254,9 +260,23 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
     @Override
     public ParkingOrder getCurrentOrder(Long vehicleId) {
-        return this.getOne(new LambdaQueryWrapper<ParkingOrder>()
+        ParkingOrder order = this.getOne(new LambdaQueryWrapper<ParkingOrder>()
                 .eq(ParkingOrder::getVehicleId, vehicleId)
                 .eq(ParkingOrder::getStatus, Constants.ORDER_STATUS_ONGOING));
+        if (order != null) {
+            order.setPlateNo(decryptPlateNo(order));
+        }
+        return order;
+    }
+
+    @Override
+    public ParkingOrder getByOrderNo(String orderNo) {
+        ParkingOrder order = this.getOne(new LambdaQueryWrapper<ParkingOrder>()
+                .eq(ParkingOrder::getOrderNo, orderNo));
+        if (order != null) {
+            order.setPlateNo(decryptPlateNo(order));
+        }
+        return order;
     }
 
     @Override
@@ -401,7 +421,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
         ParkingOrder order = this.getOne(new LambdaQueryWrapper<ParkingOrder>()
                 .eq(ParkingOrder::getOrderNo, orderNo));
         if (order == null) {
-            throw new RuntimeException("订单不存在");
+            throw new BizException(ErrorCode.ORDER_NOT_FOUND);
         }
         closeOrderAndReleaseSpace(order, "取消订单", "POST /api/order/cancel/{orderNo}",
                 "{\"orderNo\":\"" + orderNo + "\"}");
