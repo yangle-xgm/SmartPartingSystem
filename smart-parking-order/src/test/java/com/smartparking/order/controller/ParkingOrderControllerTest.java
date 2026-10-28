@@ -79,6 +79,11 @@ class ParkingOrderControllerTest {
 
     @Test
     void calculate_returnsAmount() throws Exception {
+        // P1-5 起 calculate 先按订单号取订单并校验归属，再算费；需 mock getByOrderNo
+        ParkingOrder existing = new ParkingOrder();
+        existing.setOrderNo("P202610130001");
+        existing.setVehicleId(1L);
+        when(parkingOrderService.getByOrderNo("P202610130001")).thenReturn(existing);
         when(parkingOrderService.calculateAmount(anyString())).thenReturn(BigDecimal.TEN);
 
         mockMvc.perform(get("/api/order/calculate").param("orderNo", "P202610130001"))

@@ -55,4 +55,10 @@ public interface ParkingSpaceService extends IService<ParkingSpace> {
      * 切换车位共享状态
      */
     void toggleShare(Long spaceId, Integer isShared);
+
+    /**
+     * 车位占用汇总（内部接口用，communityId 非空时按小区统计）：
+     * total=总车位数（未删除），occupied=占用中(status=1)车位数
+     */
+    Map<String, Object> getOccupancySummary(Long communityId);
 }
