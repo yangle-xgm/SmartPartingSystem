@@ -36,34 +36,55 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private static final String SECRET = "SmartParkingSystemSecretKey2026VeryLongKey!!";
     private static final String TOKEN_PREFIX = "Bearer ";
 
+    /** 内部调用令牌 Header：/internal/** 仅允许携带该 Header 的请求通过（服务间约定，外部用户 token 无效） */
+    public static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+
     /** 白名单路径（无需认证） */
     private static final List<String> WHITE_LIST = Arrays.asList(
             "/api/user/login",
             "/api/user/register",
             "/api/user/refresh",
             "/api/user/captcha",
-            "/api/**/internal/**",   // 服务间内部调用（微服务间通过网关互调时免鉴权，由调用方服务鉴权）
+            // 注意：原 /api/**/internal/** 白名单已移除（E2E 报告 P0-1：业主可经网关直接调内部接口退款/伪造支付）。
+            // /internal/** 现要求 X-Internal-Token 校验，见 filter() 内部分支。
             "/doc.html",
             "/webjars/**",
             "/v3/api-docs/**",
             "/swagger-resources/**"
     );
 
-    /** 仅管理端（物业 role=1 / 超管 role=2）可访问的路径 */
+    /** 内部接口路径模式：命中则必须携带 X-Internal-Token（服务间调用约定），不接受普通用户 JWT */
+    private static final List<String> INTERNAL_PATTERNS = Arrays.asList(
+            "/api/**/internal/**"
+    );
+
+    /** 仅管理端（物业 role=1 / 超管 role=2）可访问的路径。支持 "METHOD /path" 形式限定写操作。 */
     private static final List<String> ADMIN_ONLY_PATTERNS = Arrays.asList(
             "/api/audit/**",
             "/api/user/list",
-            "/api/user/update",
             "/api/device/list",
             "/api/device/*",
             "/api/device/gate/**",
             "/api/stats/income",
             "/api/stats/occupancy",
             "/api/stats/peak",
-            "/api/stats/export"
+            "/api/stats/export",
+            // E2E 报告 P0-2/P0-3：以下管理端接口此前业主可直接调用
+            "/api/notify/admin/**",            // 群发通知（原业主可调，越权）
+            "POST /api/parking/space",         // 新增车位
+            "PUT /api/parking/space/**",       // 修改车位（含 share 分享配置）
+            "DELETE /api/parking/space/**",    // 删除车位
+            "GET /api/notify/feedback/all",    // 读全量反馈
+            "POST /api/notify/feedback/*/reply" // 回复反馈
+            // 注意：/api/user/update 不在管理端白名单内 —— 业主也需要修改本人资料，
+            // 服务端已按 X-User-Role=0 强制把 dto.id 覆盖为当前登录人，避免越权改他人。
     );
 
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    /** 内部令牌配置值：生产环境经 NACOS/环境变量覆盖；缺省为开发联调固定值 */
+    @Value("${gateway.internal-token:SmartParking-Internal-2026}")
+    private String internalToken;
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -73,6 +94,16 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         // 白名单放行
         if (isWhiteListed(path)) {
             return chain.filter(exchange);
+        }
+
+        // 内部接口（/api/**/internal/**）：必须携带 X-Internal-Token 才放行。
+        // 该 Header 仅服务间调用方知道，外部用户即使持有合法 JWT 也无法通过 —— E2E 报告 P0-1。
+        if (isInternalPath(path)) {
+            String headerToken = request.getHeaders().getFirst(INTERNAL_TOKEN_HEADER);
+            if (StringUtils.hasText(headerToken) && internalToken.equals(headerToken)) {
+                return chain.filter(exchange);
+            }
+            return forbiddenResponse(exchange, "内部接口禁止外部访问");
         }
 
         // 获取Token
@@ -98,7 +129,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .build();
 
             // 管理端接口角色校验：业主(role=0)不允许访问
-            if (isAdminOnly(path) && (role == null || role == 0)) {
+            if (isAdminOnly(request) && (role == null || role == 0)) {
                 return forbiddenResponse(exchange, "无权限访问管理端资源");
             }
 
@@ -120,8 +151,25 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         return WHITE_LIST.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
     }
 
-    private boolean isAdminOnly(String path) {
-        return ADMIN_ONLY_PATTERNS.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    private boolean isInternalPath(String path) {
+        return INTERNAL_PATTERNS.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    }
+
+    /**
+     * 管理端路径匹配：支持 "METHOD /path"（限定 HTTP 方法）与 "/path"（任意方法）两种形式。
+     * 例如 "POST /api/parking/space" 只拦新建，不拦 GET 列表（业主也要看车位）。
+     */
+    private boolean isAdminOnly(ServerHttpRequest request) {
+        String path = request.getURI().getPath();
+        String method = request.getMethod() == null ? "" : request.getMethod().name();
+        return ADMIN_ONLY_PATTERNS.stream().anyMatch(pattern -> {
+            int sp = pattern.indexOf(' ');
+            if (sp > 0) {
+                return method.equalsIgnoreCase(pattern.substring(0, sp))
+                        && pathMatcher.match(pattern.substring(sp + 1), path);
+            }
+            return pathMatcher.match(pattern, path);
+        });
     }
 
     private String getTokenFromRequest(ServerHttpRequest request) {
@@ -145,7 +193,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String body = String.format("{\"code\":401,\"message\":\"%s\",\"data\":null}", message);
+        // 与 Result<T> 契约一致：补 timestamp 字段（E2E 报告 P2-7）
+        String body = String.format("{\"code\":401,\"message\":\"%s\",\"data\":null,\"timestamp\":%d}",
+                message, System.currentTimeMillis());
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));
     }
@@ -154,7 +204,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.FORBIDDEN);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String body = String.format("{\"code\":403,\"message\":\"%s\",\"data\":null}", message);
+        String body = String.format("{\"code\":403,\"message\":\"%s\",\"data\":null,\"timestamp\":%d}",
+                message, System.currentTimeMillis());
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));
     }

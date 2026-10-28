@@ -38,6 +38,11 @@ public interface ParkingOrderService extends IService<ParkingOrder> {
     ParkingOrder getCurrentOrder(Long vehicleId);
 
     /**
+     * 按订单号查询订单详情（车牌已解密，供前端展示）
+     */
+    ParkingOrder getByOrderNo(String orderNo);
+
+    /**
      * 实时计算停车费用
      */
     BigDecimal calculateAmount(String orderNo);
