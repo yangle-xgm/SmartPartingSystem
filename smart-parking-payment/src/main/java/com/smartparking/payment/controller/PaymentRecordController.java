@@ -3,6 +3,9 @@ package com.smartparking.payment.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.payment.po.PaymentRecord;
 import com.smartparking.payment.query.PaymentRecordQuery;
 import com.smartparking.payment.service.PaymentRecordService;
@@ -101,7 +104,7 @@ public class PaymentRecordController {
     private Result<Map<String, Object>> mockPay(String payNo, String channelPrefix) {
         PaymentRecord record = paymentRecordService.getByPayNo(payNo);
         if (record == null) {
-            return Result.fail("支付记录不存在");
+            return Result.fail(ErrorCode.PAY_NOT_FOUND);
         }
         if (record.getPayStatus() != 0) {
             return Result.fail("支付状态异常，当前状态：" + record.getPayStatus());
@@ -155,8 +158,15 @@ public class PaymentRecordController {
     @Operation(summary = "查询订单支付记录")
     @GetMapping("/bill")
     public Result<PaymentRecord> bill(
-            @Parameter(description = "订单ID") @RequestParam Long orderId) {
+            @Parameter(description = "订单ID") @RequestParam Long orderId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
         PaymentRecord record = paymentRecordService.getByOrderId(orderId);
+        // E2E 报告 P1-5：业主(role=0)只能看自己订单的账单，防遍历他人 orderId
+        if (record != null && "0".equals(currentRole) && currentUserId != null
+                && !Long.valueOf(currentUserId).equals(record.getUserId())) {
+            throw new BizException(ErrorCode.PAY_NOT_FOUND, "无权查看该账单");
+        }
         return Result.success(record);
     }
 

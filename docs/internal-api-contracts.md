@@ -2,7 +2,9 @@
 
 > 本文件是服务间内部接口的**唯一权威契约**（single source of truth）。
 > 跨服务取数铁律（AGENTS.md §3）：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须调
-> `/internal/**` 接口，网关不对外暴露 `/internal/**`（`AuthGlobalFilter` 白名单仅放行 `/api/**/internal/**`）。
+> `/internal/**` 接口，网关不对外暴露 `/internal/**`。
+> **网关侧（E2E 报告 P0-1 后）**：`AuthGlobalFilter` 白名单**不再放行** `/api/**/internal/**`；
+> 该路径段要求携带 `X-Internal-Token` Header（服务间约定，外部用户 JWT 无效）。
 >
 > 实现形态：`@Component` + `RestTemplate` + `@Value` 配置 URL（非 OpenFeign）。
 > 每个 provider 模块都有对应的 `*InternalApiContractTest`（`@WebMvcTest` + MockMvc）守护本清单，
@@ -16,8 +18,9 @@
 | 2 | notify `NotificationController.fetchOwnerIds()`（广播拉业主） | user | `GET /api/user/internal/owner-ids` | `$.data` 必须是**裸 Long 数组**（消费者 `Long.valueOf(String.valueOf(o))`） | `UserInternalApiContractTest` |
 | 3 | order `ParkingSpaceClient.updateStatus()` | parking | `PUT /api/parking/internal/space/{id}/status?status=` | 0 空闲 / 1 占用；`Result<Void>` | `ParkingInternalApiContractTest` |
 | 4 | order `ParkingSpaceClient.claimSpace()`（入场防并发） | parking | `POST /api/parking/internal/space/{id}/claim` | `$.data` 必须是**裸 Boolean**（`Boolean.TRUE.equals` 解析） | `ParkingInternalApiContractTest` |
-| 5 | order `ParkingSpaceClient.getSpaceInfo()`、payment `handleShareIncome()`（分润链路） | parking | `GET /api/parking/internal/space-info/{id}` | `$.data` 必须含 `id`/`spaceNo`/`ownerId`/`isShared` 四字段；`isShared` 必须是 Boolean（未共享=false，非 null）；不存在时 `code!=200` + `data` 缺省 | `ParkingInternalApiContractTest` |
-| 6 | order `VehicleClient.getVehicleByPlate()`、notify `OrderMessageConsumer` | vehicle | `GET /api/vehicle/internal/info/{plateNo}` | 路径变量为 **URL-encode 后的车牌**；`$.data` 为 Vehicle；未注册 `code!=200` + message=车辆未注册 | `VehicleInternalApiContractTest` |
+| 5 | order `ParkingSpaceClient.getSpaceInfo()`、payment `handleShareIncome()`（分润链路） | parking | `GET /api/parking/internal/space-info/{id}` | `$.data` 必须含 `id`/`spaceNo`/`ownerId`/`isShared` 四字段；`isShared` 必须是 Boolean（未共享=false，非 null）；不存在时 `code=5201` + `data` 缺省 | `ParkingInternalApiContractTest` |
+| 5b | stats `ParkingStatsServiceImpl.backfillSpaceCounts()`（占用率回填，E2E P1-2） | parking | `GET /api/parking/internal/occupancy-summary` | `$.data.total`/`$.data.occupied` 必须是 Number（`((Number) m.get("total")).intValue()`）；失败调用方保持原值不误报 | `ParkingInternalApiContractTest` |
+| 6 | order `VehicleClient.getVehicleByPlate()`、notify `OrderMessageConsumer` | vehicle | `GET /api/vehicle/internal/info/{plateNo}` | 路径变量为 **URL-encode 后的车牌**；`$.data` 为 Vehicle；未注册 `code=5501` + message=车辆不存在 | `VehicleInternalApiContractTest` |
 | 7 | order `VehicleClient.listVehicleIdsByOwner()`（订单数据隔离） | vehicle | `GET /api/vehicle/internal/list-by-owner?ownerId=` | `$.data` 必须是**裸 Long 数组**（逗号拼接 vehicleIds） | `VehicleInternalApiContractTest` |
 | 8 | —（黑名单/运维链路预留） | vehicle | `PUT /api/vehicle/internal/{id}/status?status=` | `Result<Void>` | `VehicleInternalApiContractTest` |
 | 9 | payment `paymentSuccess()`（支付成功直连兜底） | order | `POST /api/order/internal/confirm-payment?orderId=&amount=` | `amount` 按 `BigDecimal.toString()` 拼接，provider 必须按 BigDecimal 绑定 | `OrderInternalApiContractTest` |

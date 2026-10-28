@@ -77,14 +77,14 @@ class VehicleInternalApiContractTest {
     }
 
     @Test
-    @DisplayName("GET /api/vehicle/internal/info/{plateNo}：未注册车辆返回 fail 契约（code!=200，data 缺省）")
+    @DisplayName("GET /api/vehicle/internal/info/{plateNo}：未注册车辆返回 fail 契约（code=5501，data 缺省）")
     void getInfoByPlate_unregistered_returnsFailContract() throws Exception {
         when(vehicleService.getByPlateNo("京B99999")).thenReturn(null);
 
         mockMvc.perform(get("/api/vehicle/internal/info/京B99999"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
-                .andExpect(jsonPath("$.message").value("车辆未注册"))
+                .andExpect(jsonPath("$.code").value(5501))
+                .andExpect(jsonPath("$.message").value("车辆不存在"))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 
