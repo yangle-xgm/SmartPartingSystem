@@ -68,6 +68,12 @@ public class Constants {
     /** 支付状态：已退款 */
     public static final int PAY_STATUS_REFUNDED = 2;
 
+    /** 支付状态：已关闭（支付超时未付款，与"已退款"严格区分，E2E 报告 P0-6） */
+    public static final int PAY_STATUS_CLOSED = 3;
+
+    /** 支付状态：支付失败 */
+    public static final int PAY_STATUS_FAILED = 4;
+
     /** 设备类型：道闸 */
     public static final int DEVICE_TYPE_GATE = 1;
 
