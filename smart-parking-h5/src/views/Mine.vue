@@ -4,23 +4,32 @@
       <div class="profile">
         <div class="profile__avatar">{{ avatarText }}</div>
         <div class="profile__info">
-          <b class="profile__name">{{ userInfo.realName || userInfo.username || '业主' }}</b>
-          <span class="profile__account">@{{ userInfo.username || '-' }}</span>
+          <template v-if="loading">
+            <span class="h-sk h-sk--line sk-name" />
+            <span class="h-sk h-sk--line sk-account" />
+          </template>
+          <template v-else>
+            <b class="profile__name">{{ userInfo.realName || userInfo.username || '业主' }}</b>
+            <span class="profile__account">@{{ userInfo.username || '-' }}</span>
+          </template>
         </div>
         <span class="h-pill profile__role" data-tone="gold">{{ roleMap[userInfo.role] || '业主' }}</span>
       </div>
 
       <div class="h-hero__stats">
         <div class="h-hero__stat">
-          <b>{{ vehicleCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ vehicleCount }}</b>
           <span>绑定车辆</span>
         </div>
         <div class="h-hero__stat" data-tone="teal">
-          <b>{{ orderCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ orderCount }}</b>
           <span>停车订单</span>
         </div>
         <div class="h-hero__stat" data-tone="gold">
-          <b>{{ unread }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ unread }}</b>
           <span>未读通知</span>
         </div>
       </div>
@@ -34,7 +43,8 @@
         </div>
         <div class="h-kv">
           <span class="h-kv__k">手机号</span>
-          <span class="h-kv__v">{{ userInfo.phoneMasked || userInfo.phone || '未绑定' }}</span>
+          <span v-if="!loading" class="h-kv__v">{{ userInfo.phoneMasked || userInfo.phone || '未绑定' }}</span>
+          <span v-else class="h-sk h-sk--line sk-val" />
         </div>
         <div class="h-kv">
           <span class="h-kv__k">角色</span>
@@ -42,11 +52,13 @@
         </div>
         <div class="h-kv">
           <span class="h-kv__k">注册时间</span>
-          <span class="h-kv__v">{{ shortTime(userInfo.createTime) }}</span>
+          <span v-if="!loading" class="h-kv__v">{{ shortTime(userInfo.createTime) }}</span>
+          <span v-else class="h-sk h-sk--line sk-val" />
         </div>
         <div class="h-kv">
           <span class="h-kv__k">所属小区</span>
-          <span class="h-kv__v">{{ communityName || '未绑定小区' }}</span>
+          <span v-if="!loading" class="h-kv__v">{{ communityName || '未绑定小区' }}</span>
+          <span v-else class="h-sk h-sk--line sk-val" />
         </div>
       </div>
 
@@ -111,6 +123,8 @@ const communityName = ref('')
 const vehicleCount = ref(0)
 const orderCount = ref(0)
 const unread = ref(0)
+/** 首屏加载态：资料与统计一次并发拉取，未回来前用骨架占位 */
+const loading = ref(true)
 
 const roleMap = { 0: '业主', 1: '管理员', 2: '超级管理员' }
 
@@ -149,6 +163,7 @@ onMounted(async () => {
     const hit = cid != null ? list.find((x) => Number(x.id) === Number(cid)) : null
     communityName.value = (hit || list[0])?.name || ''
   }
+  loading.value = false
 })
 
 async function handleLogout() {
@@ -206,12 +221,19 @@ async function handleLogout() {
 }
 .profile__role { flex-shrink: 0; }
 
+/* 资料骨架：宽度贴近真实文案，加载完不跳版 */
+.sk-name { display: block; width: 92px; height: 15px; margin-bottom: 8px; }
+.sk-account { display: block; width: 62px; height: 11px; }
+.sk-val { display: block; width: 96px; height: 12px; }
+
 .links__item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 11px 0;
+  transition: opacity 0.16s var(--sp-ease);
 }
+.links__item:active { opacity: 0.6; }
 .links__item + .links__item { border-top: 1px solid var(--sp-divider); }
 .links__icon {
   width: 30px;

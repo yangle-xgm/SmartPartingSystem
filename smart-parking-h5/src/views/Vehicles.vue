@@ -10,15 +10,18 @@
       </div>
       <div class="h-hero__stats">
         <div class="h-hero__stat">
-          <b>{{ vehicles.length }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ vehicles.length }}</b>
           <span>绑定车辆</span>
         </div>
         <div class="h-hero__stat" data-tone="teal">
-          <b>{{ normalCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ normalCount }}</b>
           <span>状态正常</span>
         </div>
         <div class="h-hero__stat" data-tone="gold">
-          <b>{{ monthlyCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ monthlyCount }}</b>
           <span>月卡车辆</span>
         </div>
       </div>
@@ -31,8 +34,11 @@
       </div>
 
       <van-pull-refresh v-model="refreshing" @refresh="loadData">
-        <template v-if="vehicles.length">
-          <div v-for="v in vehicles" :key="v.id" class="h-card car">
+        <template v-if="loading">
+          <div v-for="n in 2" :key="`sk-${n}`" class="h-sk h-sk--card" />
+        </template>
+        <template v-else-if="vehicles.length">
+          <div v-for="v in vehicles" :key="v.id" class="h-card h-card--tap car">
             <div class="car__head">
               <span class="h-plate" :data-color="v.plateColor || '蓝'">{{ v.plateNoMasked || v.plateNo }}</span>
               <span class="h-pill" :data-tone="v.status === 0 ? 'teal' : 'danger'">
@@ -127,6 +133,8 @@ const userId = getUserId()
 
 const vehicles = ref([])
 const refreshing = ref(false)
+/** 首屏加载态：避免空态闪现后再跳成列表 */
+const loading = ref(true)
 const binding = ref(false)
 const bindVisible = ref(false)
 const detailVisible = ref(false)
@@ -158,6 +166,7 @@ async function loadData() {
     vehicles.value = []
   } finally {
     refreshing.value = false
+    loading.value = false
   }
 }
 

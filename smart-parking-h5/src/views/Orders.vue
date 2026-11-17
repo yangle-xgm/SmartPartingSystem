@@ -10,15 +10,18 @@
       </div>
       <div class="h-hero__stats">
         <div class="h-hero__stat">
-          <b>{{ allOrders.length }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ allOrders.length }}</b>
           <span>全部订单</span>
         </div>
         <div class="h-hero__stat" data-tone="teal">
-          <b>{{ ongoing.length }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ ongoing.length }}</b>
           <span>停车中</span>
         </div>
         <div class="h-hero__stat" data-tone="gold">
-          <b>¥{{ pendingAmount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>¥{{ pendingAmount }}</b>
           <span>待缴金额</span>
         </div>
       </div>
@@ -30,8 +33,11 @@
 
     <div class="h-body">
       <van-pull-refresh v-model="refreshing" @refresh="loadData">
-        <template v-if="filtered.length">
-          <div v-for="o in filtered" :key="o.orderNo" class="h-card order">
+        <template v-if="loading">
+          <div v-for="n in 3" :key="`sk-${n}`" class="h-sk h-sk--card" />
+        </template>
+        <template v-else-if="filtered.length">
+          <div v-for="o in filtered" :key="o.orderNo" class="h-card h-card--tap order">
             <div class="order__head">
               <span class="h-plate" :data-color="o.plateColor || '蓝'">
                 {{ displayPlate(o) }}
@@ -123,6 +129,8 @@ const tabs = [
 ]
 const activeTab = ref(0)
 const refreshing = ref(false)
+/** 首屏加载态：与下拉刷新分开，避免「先闪空态再跳列表」 */
+const loading = ref(true)
 const allOrders = ref([])
 
 const payVisible = ref(false)
@@ -191,6 +199,7 @@ async function loadData() {
     allOrders.value = []
   } finally {
     refreshing.value = false
+    loading.value = false
   }
 }
 

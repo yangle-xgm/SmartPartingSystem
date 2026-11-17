@@ -411,6 +411,21 @@ a, button, [role='button'], .h-grid__item, .h-section__more,
 .h-sk--line { height: 12px; }
 .h-sk--num { height: 20px; width: 60%; margin: 0 auto 6px; }
 .h-sk--row { height: 44px; margin-bottom: 10px; }
+.h-sk--card {
+  height: 104px;
+  margin-bottom: var(--sp-gap-card);
+  border-radius: var(--sp-radius-card);
+}
+.h-sk--card:last-child { margin-bottom: 0; }
+
+/* 可点卡片统一按压反馈：手机上没有 hover，缺少按下态就“点了像没反应” */
+.h-card--tap {
+  transition: transform 0.16s var(--sp-ease), background-color 0.16s var(--sp-ease);
+}
+.h-card--tap:active {
+  transform: scale(0.988);
+  background: var(--sp-surface-2);
+}
 
 /* ---------- 主按钮 ---------- */
 .h-btn {

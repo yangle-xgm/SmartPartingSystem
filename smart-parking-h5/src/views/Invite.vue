@@ -10,15 +10,18 @@
       </div>
       <div class="h-hero__stats">
         <div class="h-hero__stat">
-          <b>{{ invites.length }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ invites.length }}</b>
           <span>邀请总数</span>
         </div>
         <div class="h-hero__stat" data-tone="teal">
-          <b>{{ validCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ validCount }}</b>
           <span>有效中</span>
         </div>
         <div class="h-hero__stat" data-tone="gold">
-          <b>{{ usedCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ usedCount }}</b>
           <span>已使用</span>
         </div>
       </div>
@@ -95,8 +98,11 @@
       </div>
 
       <van-pull-refresh v-model="refreshing" @refresh="loadData">
-        <template v-if="visibleInvites.length">
-          <div v-for="inv in visibleInvites" :key="inv.id" class="h-card inv">
+        <template v-if="loading">
+          <div v-for="n in 2" :key="`sk-${n}`" class="h-sk h-sk--card" />
+        </template>
+        <template v-else-if="visibleInvites.length">
+          <div v-for="inv in visibleInvites" :key="inv.id" class="h-card h-card--tap inv">
             <div class="inv__head">
               <div>
                 <div class="inv__code" @click="copyCode(inv.inviteCode)">
@@ -105,7 +111,9 @@
                 </div>
                 <div class="inv__plate">{{ inv.plateNoMasked || inv.plateNo || '-' }}</div>
               </div>
-              <span class="h-pill" :data-tone="statusTone[inv.status]">{{ statusMap[inv.status] || '未知' }}</span>
+              <span class="h-pill" :data-tone="statusTone[effStatus(inv)]">
+                {{ statusMap[effStatus(inv)] || '未知' }}
+              </span>
             </div>
 
             <div class="h-kv">
@@ -114,7 +122,7 @@
             </div>
 
             <button
-              v-if="inv.status === 0"
+              v-if="effStatus(inv) === 0"
               class="minibtn minibtn--danger"
               type="button"
               @click="handleInvalidate(inv)"
@@ -148,6 +156,8 @@ const userId = getUserId()
 
 const generating = ref(false)
 const refreshing = ref(false)
+/** 首屏加载态：避免「暂无邀请」闪现后再跳出记录 */
+const loading = ref(true)
 const newInvite = ref(null)
 const invites = ref([])
 const activeFilter = ref(0)
@@ -169,15 +179,29 @@ const filters = [
 const statusMap = { 0: '有效', 1: '已使用', 2: '已过期', 3: '已作废' }
 const statusTone = { 0: 'teal', 1: 'muted', 2: 'warning', 3: 'danger' }
 
-const validCount = computed(() => invites.value.filter(i => i.status === 0).length)
-const usedCount = computed(() => invites.value.filter(i => i.status === 1).length)
+/**
+ * 有效期的最终判定（E2E 报告 P1-8，与 PC 端 invite 页逐字同口径）：
+ * 后端 status 依赖定时任务翻转，过期但任务未跑时仍是 0，
+ * 所以「已过有效期」一律按已过期处理，标签 / 筛选 / 汇总 / 作废按钮全走 effStatus。
+ */
+function isExpired(inv) {
+  if (inv.status === 2 || inv.status === 3) return true
+  if (!inv.expireTime) return false
+  const t = new Date(String(inv.expireTime).replace(' ', 'T')).getTime()
+  return Number.isFinite(t) && t < Date.now()
+}
+
+const effStatus = (inv) => (inv.status === 0 && isExpired(inv) ? 2 : inv.status)
+
+const validCount = computed(() => invites.value.filter(i => effStatus(i) === 0).length)
+const usedCount = computed(() => invites.value.filter(i => effStatus(i) === 1).length)
 
 const visibleInvites = computed(() => {
   const f = activeFilter.value
   if (f === 0) return invites.value
-  if (f === 1) return invites.value.filter(i => i.status === 0)
-  if (f === 2) return invites.value.filter(i => i.status === 1)
-  return invites.value.filter(i => i.status === 2 || i.status === 3)
+  if (f === 1) return invites.value.filter(i => effStatus(i) === 0)
+  if (f === 2) return invites.value.filter(i => effStatus(i) === 1)
+  return invites.value.filter(i => effStatus(i) === 2 || effStatus(i) === 3)
 })
 
 function shortTime(t) {
@@ -197,6 +221,7 @@ async function loadData() {
     invites.value = []
   } finally {
     refreshing.value = false
+    loading.value = false
   }
 }
 
