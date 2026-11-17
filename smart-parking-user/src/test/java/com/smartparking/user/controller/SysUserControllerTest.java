@@ -77,13 +77,16 @@ class SysUserControllerTest {
         vo.setId(1L);
         vo.setUsername("admin");
         vo.setRole(2);
+        // E2E 遗留缺口：/user/info 必须带 communityId，否则 H5「我的」只能回退列表首条
+        vo.setCommunityId(2L);
         when(sysUserService.getUserInfo(1L)).thenReturn(vo);
 
         mockMvc.perform(get("/api/user/info").param("userId", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.username").value("admin"))
-                .andExpect(jsonPath("$.data.role").value(2));
+                .andExpect(jsonPath("$.data.role").value(2))
+                .andExpect(jsonPath("$.data.communityId").value(2));
     }
 
     @Test

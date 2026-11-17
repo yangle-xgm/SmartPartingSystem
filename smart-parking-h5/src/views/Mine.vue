@@ -155,13 +155,14 @@ onMounted(async () => {
   }
   if (n.status === 'fulfilled' && n.value.code === 200) unread.value = Number(n.value.data) || 0
   // 用社区档案把 communityId 翻译成真实小区名（此前写死「默认小区」）。
-  // 用户未绑定 communityId 时，网关会按缺省 X-Community-Id=1 处理，
-  // 因此回退到列表首条（后端 ORDER BY id，1 号即默认小区），与后端口径一致。
+  // 后端 /user/info 现已下发 communityId，按 id 精确匹配；匹配不到（未绑定/小区被删）
+  // 时留空由模板显示「未绑定小区」，不再错显列表首条——多小区下那会把 2/3 号小区
+  // 的业主显示成 1 号小区，且看不出是错的。
   if (c.status === 'fulfilled' && c.value.code === 200) {
     const list = Array.isArray(c.value.data) ? c.value.data : []
     const cid = userInfo.value.communityId
     const hit = cid != null ? list.find((x) => Number(x.id) === Number(cid)) : null
-    communityName.value = (hit || list[0])?.name || ''
+    communityName.value = hit?.name || ''
   }
   loading.value = false
 })

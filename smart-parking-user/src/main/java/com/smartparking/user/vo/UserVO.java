@@ -37,6 +37,17 @@ public class UserVO {
     @Schema(description = "角色（0业主 1管理员 2超级管理员）")
     private Integer role;
 
+    /**
+     * 所属小区ID。
+     *
+     * <p>E2E 报告遗留缺口：此前 VO 不含该字段，H5「我的」拿不到 {@code communityId}，
+     * 只能回退到小区档案列表首条来显示小区名——多小区数据下（社区 2/3 的业主）
+     * 会显示成 1 号小区，属于"看着对、其实错"的静默缺陷。
+     * 现按 {@code sys_user.community_id} 原样下发，由前端按 id 精确匹配。</p>
+     */
+    @Schema(description = "所属小区ID")
+    private Long communityId;
+
     @Schema(description = "头像地址")
     private String avatar;
 
@@ -55,6 +66,7 @@ public class UserVO {
         vo.setUsername(user.getUsername());
         vo.setRealName(user.getRealName());
         vo.setRole(user.getRole());
+        vo.setCommunityId(user.getCommunityId());
         vo.setAvatar(user.getAvatar());
         vo.setStatus(user.getStatus());
         vo.setCreateTime(user.getCreateTime());
