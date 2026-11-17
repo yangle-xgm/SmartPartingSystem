@@ -13,9 +13,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 订单消息消费者：入场/出场通知（真实落地）
@@ -43,7 +46,9 @@ public class OrderMessageConsumer {
     public void handleOrderMessage(Message message, Channel channel) throws IOException {
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
-            String body = new String(message.getBody());
+            // 必须显式 UTF-8：无参构造用平台默认字符集，Windows(GBK) 下「京B80950」会解成「滨珩80950」，
+            // 反查车主必然 5501，通知被当成「未注册车主」丢弃——这是入场通知发不出去的真因。
+            String body = new String(message.getBody(), StandardCharsets.UTF_8);
             Map<String, Object> data = OBJECT_MAPPER.readValue(body, Map.class);
             String type = String.valueOf(data.getOrDefault("type", ""));
             String plateNo = String.valueOf(data.getOrDefault("plateNo", ""));
@@ -60,9 +65,13 @@ public class OrderMessageConsumer {
             String vehicleLabel = vehicleType == 1 ? "您的访客车辆" : "您的车辆";
 
             if ("ENTRY".equals(type)) {
-                String spaceNo = String.valueOf(data.getOrDefault("spaceNo", ""));
-                String content = String.format("%s %s 已于 %s 入场，停放在 %s",
-                        vehicleLabel, plateNo, LocalDateTime.now().format(TIME_FORMAT), spaceNo);
+                // Objects.toString 兜底：消息里显式放 null 时 String.valueOf 会得到字符串 "null"
+                String spaceNo = Objects.toString(data.get("spaceNo"), "");
+                String content = spaceNo.isBlank()
+                        ? String.format("%s %s 已于 %s 入场",
+                                vehicleLabel, plateNo, LocalDateTime.now().format(TIME_FORMAT))
+                        : String.format("%s %s 已于 %s 入场，停放在 %s",
+                                vehicleLabel, plateNo, LocalDateTime.now().format(TIME_FORMAT), spaceNo);
                 notificationService.sendNotification(ownerId, "车辆入场通知", content, 1);
                 log.info("已发送入场通知：userId={}, plateNo={}", ownerId, plateNo);
             } else if ("EXIT".equals(type)) {
@@ -90,8 +99,13 @@ public class OrderMessageConsumer {
             return null;
         }
         try {
-            String url = vehicleUrl + "/api/vehicle/internal/info/" + plateNo;
-            String body = restTemplate.getForObject(url, String.class);
+            // 车牌含中文，必须做 URL 编码：直接拼进 path 会被服务端按 ISO-8859-1 解码成乱码，
+            // 反查恒返回 5501「车辆不存在」，通知就被当成「未注册车主」丢弃。
+            String encoded = URLEncoder.encode(plateNo, StandardCharsets.UTF_8).replace("+", "%20");
+            String url = vehicleUrl + "/api/vehicle/internal/info/" + encoded;
+            // 必须传 URI 对象：传 String 会被 UriTemplateHandler 再编码一次（%E4→%25E4），服务端解出乱码
+            String body = restTemplate.getForObject(java.net.URI.create(url), String.class);
+            log.debug("[反查车辆] url={} body={}", url, body);
             if (body == null) {
                 return null;
             }

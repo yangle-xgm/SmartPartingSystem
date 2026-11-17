@@ -144,6 +144,8 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             m.put("vehicleId", vehicleId);
             m.put("plateNo", plateNo);
             m.put("spaceId", spaceId);
+            // 通知消费者按 spaceNo 拼文案（"入场，停放在 %s"）；缺这个字段会渲染成"停放在 "后面空白
+            m.put("spaceNo", spaceNo);
             m.put("entryTime", order.getEntryTime());
             m.put("type", "ENTRY");
             try { rabbitTemplate.convertAndSend("parking.order.exchange", "order.entry", m); }
