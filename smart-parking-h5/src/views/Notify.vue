@@ -13,15 +13,18 @@
       </div>
       <div class="h-hero__stats">
         <div class="h-hero__stat" data-tone="gold">
-          <b>{{ unreadCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ unreadCount }}</b>
           <span>未读消息</span>
         </div>
         <div class="h-hero__stat">
-          <b>{{ list.length }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ list.length }}</b>
           <span>全部消息</span>
         </div>
         <div class="h-hero__stat" data-tone="teal">
-          <b>{{ todayCount }}</b>
+          <span v-if="loading" class="h-sk h-sk--num" />
+          <b v-else>{{ todayCount }}</b>
           <span>今日消息</span>
         </div>
       </div>
@@ -40,11 +43,14 @@
       </div>
 
       <van-pull-refresh v-model="refreshing" @refresh="loadData">
-        <template v-if="visibleList.length">
+        <template v-if="loading">
+          <div v-for="n in 3" :key="`sk-${n}`" class="h-sk h-sk--card" />
+        </template>
+        <template v-else-if="visibleList.length">
           <div
             v-for="n in visibleList"
             :key="n.id"
-            class="h-card msg"
+            class="h-card h-card--tap msg"
             :class="{ 'msg--unread': n.isRead === 0 }"
             @click="handleRead(n)"
           >
@@ -81,6 +87,8 @@ const userId = getUserId()
 
 const list = ref([])
 const refreshing = ref(false)
+/** 首屏加载态：避免「暂无通知」闪现后再跳出列表 */
+const loading = ref(true)
 const activeFilter = ref(0)
 
 const filters = [
@@ -118,6 +126,7 @@ async function loadData() {
     list.value = []
   } finally {
     refreshing.value = false
+    loading.value = false
   }
 }
 
