@@ -3,6 +3,7 @@ package com.smartparking.user.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.web.WebRequestUtils;
 import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.user.dto.LoginDTO;
 import com.smartparking.user.dto.RegisterDTO;
@@ -114,7 +115,7 @@ public class SysUserController {
     public Result<Void> logout(@Parameter(description = "用户ID") @RequestParam Long userId) {
         // 记录退出日志（用户服务内直接审计）
         auditLogService.record(userId, null, "退出登录", "POST /api/user/logout",
-                "{\"userId\":" + userId + "}", true, null, null);
+                "{\"userId\":" + userId + "}", true, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
         return Result.success();
     }
 

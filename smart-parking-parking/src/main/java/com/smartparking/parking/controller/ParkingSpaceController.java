@@ -10,6 +10,7 @@ import com.smartparking.parking.service.ParkingSpaceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,7 +53,7 @@ public class ParkingSpaceController {
 
     @Operation(summary = "新增车位")
     @PostMapping("/space")
-    public Result<Void> add(@RequestBody ParkingSpace space) {
+    public Result<Void> add(@Valid @RequestBody ParkingSpace space) {
         space.setStatus(0); // 默认空闲
         parkingSpaceService.save(space);
         return Result.success();
@@ -60,16 +61,21 @@ public class ParkingSpaceController {
 
     @Operation(summary = "更新车位信息")
     @PutMapping("/space/{id}")
-    public Result<Void> update(@PathVariable Long id, @RequestBody ParkingSpace space) {
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody ParkingSpace space) {
         space.setId(id);
-        parkingSpaceService.updateById(space);
+        // DEF-01：影响 0 行说明 id 不存在（含雪花 id 精度丢失的错 id），不能再返回 200 假成功
+        if (!parkingSpaceService.updateById(space)) {
+            return Result.fail(ErrorCode.SPACE_NOT_FOUND);
+        }
         return Result.success();
     }
 
     @Operation(summary = "删除车位")
     @DeleteMapping("/space/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        parkingSpaceService.removeById(id);
+        if (!parkingSpaceService.removeById(id)) {
+            return Result.fail(ErrorCode.SPACE_NOT_FOUND);
+        }
         return Result.success();
     }
 

@@ -1,62 +1,80 @@
 <template>
-  <div>
-    <div class="ai-fab" @click="visible = !visible" title="AI智能客服">
-      <svg v-if="!visible" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-      </svg>
-      <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-      </svg>
-      <span class="ai-badge" v-if="!visible">AI</span>
-    </div>
-    <transition name="fade">
-      <div v-if="visible" class="ai-panel">
-        <div class="ai-header">
-          <div class="ai-header-left">
-            <div class="ai-avatar">AI</div>
-            <div>
-              <div class="ai-title">智能客服助手</div>
-              <div class="ai-subtitle">在线 · 为您解答停车相关问题</div>
-            </div>
+  <div class="ai">
+    <transition name="ai-pop">
+      <section v-if="visible" class="ai__panel">
+        <header class="ai__head">
+          <div class="ai__avatar">星</div>
+          <div class="ai__id">
+            <b>星仔 · 智能客服</b>
+            <i><span class="ai__live" /> 在线解答停车问题</i>
           </div>
-        </div>
-        <div class="ai-body" ref="bodyRef">
-          <div v-for="(m, i) in messages" :key="i" :class="['ai-msg', m.role]">
-            <div class="bubble">{{ m.content }}</div>
-          </div>
-          <div v-if="loading" class="ai-msg bot">
-            <div class="bubble typing"><span></span><span></span><span></span></div>
-          </div>
-        </div>
-        <div class="ai-quick">
-          <span class="quick-btn" @click="quick('如何缴费')">如何缴费</span>
-          <span class="quick-btn" @click="quick('如何邀请访客')">邀请访客</span>
-          <span class="quick-btn" @click="quick('月卡怎么续费')">月卡续费</span>
-        </div>
-        <div class="ai-input">
-          <input v-model="input" placeholder="输入您的问题..." @keyup.enter="send" />
-          <button @click="send" :disabled="loading">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          <button class="ai__close" @click="visible = false" title="收起">
+            <el-icon><Close /></el-icon>
           </button>
+        </header>
+
+        <div ref="bodyRef" class="ai__body">
+          <div v-for="(m, i) in messages" :key="i" class="ai__msg" :class="m.role">
+            <span v-if="m.role === 'bot'" class="ai__mini">星</span>
+            <div class="ai__bubble">{{ m.content }}</div>
+          </div>
+          <div v-if="loading" class="ai__msg bot">
+            <span class="ai__mini">星</span>
+            <div class="ai__bubble ai__typing"><i /><i /><i /></div>
+          </div>
         </div>
-      </div>
+
+        <div class="ai__quick">
+          <button v-for="q in quicks" :key="q" class="ai__chip" @click="ask(q)">{{ q }}</button>
+        </div>
+
+        <footer class="ai__input">
+          <input
+            v-model="input"
+            placeholder="描述你的问题，例如：月卡怎么续费"
+            maxlength="120"
+            @keyup.enter="send"
+          />
+          <button :disabled="loading || !input.trim()" @click="send">
+            <el-icon><Promotion /></el-icon>
+          </button>
+        </footer>
+      </section>
     </transition>
+
+    <button class="ai__fab" :class="{ 'is-open': visible }" @click="visible = !visible" :title="visible ? '收起助手' : 'AI 智能客服'">
+      <el-icon><ChatDotRound v-if="!visible" /><Close v-else /></el-icon>
+      <span v-if="!visible" class="ai__fab-tip">AI</span>
+    </button>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 import request from '@/utils/request'
 
 const visible = ref(false)
 const input = ref('')
 const loading = ref(false)
 const bodyRef = ref(null)
+
+const quicks = ['如何缴费', '邀请访客', '月卡续费', '车位预约']
+
 const messages = ref([
-  { role: 'bot', content: '您好！我是智慧停车AI助手，您可以问我：如何缴费、如何邀请访客、如何预约车位等问题。' }
+  {
+    role: 'bot',
+    content: '你好，我是星仔。可以问我：如何缴费、如何邀请访客、车位怎么预约、月卡如何续费。'
+  }
 ])
 
-const quick = (q) => { input.value = q; send() }
+const scrollBottom = () => {
+  if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
+}
+
+const ask = (q) => {
+  input.value = q
+  send()
+}
 
 const send = async () => {
   const q = input.value.trim()
@@ -64,84 +82,303 @@ const send = async () => {
   messages.value.push({ role: 'user', content: q })
   input.value = ''
   loading.value = true
-  await nextTick(); scrollBottom()
+  await nextTick()
+  scrollBottom()
   try {
+    // 后端 POST /api/ai/chat 接收 { question }，返回 { answer, provider, model }
     const res = await request({ url: '/ai/chat', method: 'post', data: { question: q } })
-    messages.value.push({ role: 'bot', content: res.data.answer })
+    const data = res.data || {}
+    messages.value.push({ role: 'bot', content: data.answer || '暂时没有找到答案，请换个说法试试。' })
   } catch (e) {
-    messages.value.push({ role: 'bot', content: '抱歉，服务暂时不可用。' })
+    messages.value.push({ role: 'bot', content: '智能客服暂时不可用，请稍后再试或联系物业前台。' })
   } finally {
     loading.value = false
-    await nextTick(); scrollBottom()
+    await nextTick()
+    scrollBottom()
   }
-}
-
-const scrollBottom = () => {
-  if (bodyRef.value) bodyRef.value.scrollTop = bodyRef.value.scrollHeight
 }
 </script>
 
 <style scoped>
-.ai-fab {
-  position: fixed; right: 28px; bottom: 28px; z-index: 9999;
-  width: 60px; height: 60px; border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; box-shadow: 0 6px 20px rgba(102,126,234,.45);
-  transition: all .3s ease; position: relative;
+.ai__fab {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 2000;
+  width: 54px;
+  height: 54px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #fff;
+  font-size: 22px;
+  display: grid;
+  place-items: center;
+  background: var(--sp-grad-brand);
+  box-shadow: 0 10px 26px var(--sp-brand-soft), 0 2px 6px rgba(15, 23, 42, 0.16);
+  transition: transform var(--sp-dur-comp) var(--sp-ease), box-shadow var(--sp-dur-comp) var(--sp-ease);
 }
-.ai-fab:hover { transform: scale(1.08); box-shadow: 0 8px 25px rgba(102,126,234,.6); }
-.ai-badge {
-  position: absolute; top: -2px; right: -2px;
-  background: #ff4757; color: #fff; font-size: 10px; font-weight: bold;
-  padding: 2px 6px; border-radius: 10px;
+
+.ai__fab:hover {
+  transform: translateY(-3px) scale(1.04);
 }
-.ai-panel {
-  position: fixed; right: 28px; bottom: 100px; z-index: 9999;
-  width: 380px; height: 540px; background: #fff; border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0,0,0,.18); display: flex; flex-direction: column; overflow: hidden;
+
+.ai__fab.is-open {
+  background: var(--sp-surface);
+  color: var(--sp-text-2);
+  border: 1px solid var(--sp-card-border);
 }
-.fade-enter-active, .fade-leave-active { transition: all .25s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(10px) scale(.96); }
-.ai-header {
-  padding: 14px 16px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff;
+
+.ai__fab-tip {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--sp-gold);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
 }
-.ai-header-left { display: flex; align-items: center; gap: 10px; }
-.ai-avatar {
-  width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.25);
-  display: flex; align-items: center; justify-content: center; font-weight: bold;
+
+.ai__panel {
+  position: fixed;
+  right: 26px;
+  bottom: 92px;
+  z-index: 2000;
+  width: 372px;
+  max-width: calc(100vw - 36px);
+  height: 534px;
+  max-height: calc(100vh - 130px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
 }
-.ai-title { font-weight: 600; font-size: 15px; }
-.ai-subtitle { font-size: 11px; opacity: .85; }
-.ai-body { flex: 1; padding: 14px; overflow-y: auto; background: #f5f7fa; }
-.ai-msg { margin-bottom: 12px; display: flex; }
-.ai-msg.user { justify-content: flex-end; }
-.bubble {
-  max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 13px; line-height: 1.6;
+
+.ai__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--sp-grad-brand);
+  color: #fff;
 }
-.ai-msg.user .bubble { background: #667eea; color: #fff; border-bottom-right-radius: 4px; }
-.ai-msg.bot .bubble { background: #fff; color: #333; border-bottom-left-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-.typing { display: flex; gap: 4px; align-items: center; padding: 12px 16px; }
-.typing span {
-  width: 7px; height: 7px; background: #bbb; border-radius: 50%;
-  animation: blink 1.2s infinite;
+
+.ai__avatar,
+.ai__mini {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-weight: 800;
+  flex: none;
 }
-.typing span:nth-child(2) { animation-delay: .2s; }
-.typing span:nth-child(3) { animation-delay: .4s; }
-@keyframes blink { 0%,80%,100%{opacity:.3} 40%{opacity:1} }
-.ai-quick { display: flex; gap: 6px; padding: 8px 14px; background: #f5f7fa; border-top: 1px solid #eee; }
-.quick-btn {
-  font-size: 12px; padding: 4px 10px; background: #fff; border: 1px solid #dcdfe6;
-  border-radius: 12px; cursor: pointer; color: #606266;
+
+.ai__avatar {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 14px;
 }
-.quick-btn:hover { border-color: #667eea; color: #667eea; }
-.ai-input { display: flex; padding: 10px; border-top: 1px solid #eee; gap: 8px; }
-.ai-input input { flex: 1; padding: 10px 14px; border: 1px solid #e4e7ed; border-radius: 20px; outline: none; font-size: 13px; }
-.ai-input input:focus { border-color: #667eea; }
-.ai-input button {
-  width: 38px; height: 38px; border-radius: 50%; border: none;
-  background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
+
+.ai__id {
+  flex: 1;
+  min-width: 0;
 }
-.ai-input button:disabled { opacity: .5; }
+
+.ai__id b {
+  display: block;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.ai__id i {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.88;
+  margin-top: 2px;
+}
+
+.ai__live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #B6F0D8;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+}
+
+.ai__close {
+  border: none;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ai__body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background: var(--sp-surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai__msg {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ai__msg.user {
+  justify-content: flex-end;
+}
+
+.ai__mini {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--sp-grad-brand);
+  margin-top: 2px;
+}
+
+.ai__bubble {
+  max-width: 78%;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai__msg.bot .ai__bubble {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-card-border);
+  color: var(--sp-text);
+  border-top-left-radius: 4px;
+}
+
+.ai__msg.user .ai__bubble {
+  background: var(--sp-brand);
+  color: #fff;
+  border-top-right-radius: 4px;
+}
+
+.ai__typing {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ai__typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sp-text-3);
+  animation: ai-blink 1.2s infinite;
+}
+
+.ai__typing i:nth-child(2) { animation-delay: 0.18s; }
+.ai__typing i:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes ai-blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+.ai__quick {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--sp-surface-2);
+  border-top: 1px solid var(--sp-divider);
+  flex-wrap: wrap;
+}
+
+.ai__chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface);
+  color: var(--sp-text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all var(--sp-dur-micro) var(--sp-ease);
+}
+
+.ai__chip:hover {
+  color: var(--sp-brand);
+  border-color: var(--sp-brand);
+  background: var(--sp-brand-soft);
+}
+
+.ai__input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--sp-divider);
+  background: var(--sp-surface);
+}
+
+.ai__input input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface-2);
+  color: var(--sp-text);
+  font-size: 13px;
+  outline: none;
+}
+
+.ai__input input:focus {
+  border-color: var(--sp-brand);
+  box-shadow: 0 0 0 3px var(--sp-brand-soft);
+}
+
+.ai__input button {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: var(--sp-grad-brand);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+}
+
+.ai__input button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-pop-enter-active,
+.ai-pop-leave-active {
+  transition: all var(--sp-dur-comp) var(--sp-ease);
+}
+
+.ai-pop-enter-from,
+.ai-pop-leave-to {
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+}
 </style>

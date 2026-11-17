@@ -21,4 +21,8 @@ public class ParkingSpaceQuery extends PageQuery {
 
     @Schema(description = "状态（0空闲 1已占用 2预约中 3维护中）")
     private Integer status;
+
+    /** D12：按小区统计真实车位数（小区管理页口径校准），显式入参优先于网关头 */
+    @Schema(description = "所属小区 ID")
+    private Long communityId;
 }

@@ -46,14 +46,34 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
     @Value("${smart-parking.gateway-url:http://localhost:8080}")
     private String gatewayUrl;
 
+    /**
+     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header，
+     * 缺省值与网关 gateway.internal-token 保持一致，生产用 SP_INTERNAL_TOKEN 统一覆盖。
+     */
+    @Value("${smart-parking.internal-token:SmartParking-Internal-2026}")
+    private String internalToken;
+
     private final RestTemplate restTemplate = buildRestTemplate();
 
-    private static org.springframework.web.client.RestTemplate buildRestTemplate() {
+    /**
+     * 内部调用一律带上 X-Internal-Token，否则会被网关以 403「内部接口禁止外部访问」拦截，
+     * 表现为支付创建恒返回 5402「订单服务暂不可用」。
+     * 拦截器内延迟读取 internalToken，保证 @Value 注入完成后再取值。
+     */
+    private org.springframework.web.client.RestTemplate buildRestTemplate() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory =
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(5000);
-        return new org.springframework.web.client.RestTemplate(factory);
+        org.springframework.web.client.RestTemplate template =
+                new org.springframework.web.client.RestTemplate(factory);
+        template.getInterceptors().add((request, body, execution) -> {
+            if (internalToken != null && !internalToken.isBlank()) {
+                request.getHeaders().set(Constants.INTERNAL_TOKEN_HEADER, internalToken);
+            }
+            return execution.execute(request, body);
+        });
+        return template;
     }
 
     @Override

@@ -92,6 +92,13 @@ public class Constants {
     /** MQTT Topic: 道闸控制 */
     public static final String MQTT_TOPIC_GATE = "device/gate/%s/control";
 
+    /**
+     * 服务间内部令牌请求头。
+     * 网关对 /api/**&#47;internal/** 强制校验该头，服务间经网关调用内部接口时必须携带，
+     * 否则返回 403「内部接口禁止外部访问」。
+     */
+    public static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+
     private Constants() {
     }
 }

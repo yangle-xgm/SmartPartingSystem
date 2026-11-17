@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartparking.common.core.utils.AesUtils;
 import com.smartparking.common.core.utils.JwtUtils;
+import com.smartparking.common.core.web.WebRequestUtils;
 import com.smartparking.common.core.exception.BizException;
 import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.user.dto.RegisterDTO;
@@ -62,7 +63,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         this.save(user);
         userAuthMetrics.onRegister();
         auditLogService.record(user.getId(), user.getUsername(), "注册", "POST /api/user/register",
-                "{\"username\":\"" + user.getUsername() + "\"}", true, null, null);
+                "{\"username\":\"" + user.getUsername() + "\"}", true, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
         return UserVO.from(user);
     }
 
@@ -93,7 +94,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             }
 
             auditLogService.record(user.getId(), user.getUsername(), "登录", "POST /api/user/login",
-                    "{\"username\":\"" + username + "\"}", true, null, null);
+                    "{\"username\":\"" + username + "\"}", true, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
             Map<String, String> tokens = new HashMap<>();
             userAuthMetrics.onLoginSuccess();
             Long communityId = user.getCommunityId() != null ? user.getCommunityId() : 1L;
@@ -104,7 +105,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             userAuthMetrics.onLoginFail();
             auditLogService.record(null, username, "登录", "POST /api/user/login",
                     "{\"username\":\"" + username + "\",\"reason\":\"" + e.getMessage() + "\"}",
-                    false, null, null);
+                    false, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
             throw e;
         }
     }
@@ -174,7 +175,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         this.updateById(user);
 
         auditLogService.record(dto.getId(), existUser.getUsername(), "修改用户", "PUT /api/user/update",
-                "{\"id\":" + dto.getId() + ",\"realName\":\"" + dto.getRealName() + "\"}", true, null, null);
+                "{\"id\":" + dto.getId() + ",\"realName\":\"" + dto.getRealName() + "\"}", true, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
     }
 
     @Override

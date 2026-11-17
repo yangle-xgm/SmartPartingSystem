@@ -1,0 +1,105 @@
+/* ============================================================
+   智慧星河 SmartGalaxy · H5 设计变量（业主端移动 Web）
+   ------------------------------------------------------------
+   与 PC 端 smart-parking-web/src/styles/tokens.css 同一套语义命名，
+   差异：H5 以浅色为底（管理端才用 .light 容器切换），
+   深色只用于"星河 Hero"首屏区块，保证手机上户外可视性。
+   规则：组件内颜色 / 圆角 / 间距 / 动效只允许引用 --sp-* 变量。
+   ============================================================ */
+
+:root {
+  /* ---------- 表面与文字（浅色底） ---------- */
+  --sp-bg: #F4F6FA;
+  --sp-bg-grad: linear-gradient(180deg, #EEF2F9 0%, #F4F6FA 32%, #F4F6FA 100%);
+  --sp-card: #FFFFFF;
+  --sp-card-border: #E6E9F0;
+  --sp-surface-2: #F7F9FC;
+  --sp-surface-3: #EEF2F8;
+  --sp-divider: #ECEEF4;
+
+  --sp-text: #232838;
+  --sp-text-2: #5A6577;
+  --sp-text-3: #7C8798;
+
+  /* ---------- 品牌色 ---------- */
+  --sp-brand: #4C6FA8;
+  --sp-brand-bright: #5E7FBB;
+  --sp-brand-soft: rgba(76, 111, 168, 0.10);
+  --sp-teal: #2E9E7C;
+  --sp-teal-soft: rgba(46, 158, 124, 0.10);
+  --sp-gold: #B07B24;
+  --sp-gold-soft: rgba(176, 123, 36, 0.12);
+  --sp-danger: #C25E5E;
+  --sp-danger-soft: rgba(194, 94, 94, 0.10);
+  --sp-warning: #C98F2F;
+  --sp-warning-soft: rgba(201, 143, 47, 0.12);
+
+  --sp-grad-brand: linear-gradient(135deg, #4C6FA8 0%, #2E9E7C 100%);
+  --sp-grad-gold: linear-gradient(135deg, #E3B96B 0%, #B07B24 100%);
+
+  /* ---------- 星河 Hero（深色区块） ---------- */
+  --sp-hero-bg: linear-gradient(155deg, #0E1728 0%, #16233C 48%, #1B3350 100%);
+  --sp-hero-text: #EDF1F8;
+  --sp-hero-text-2: #A9B8D0;
+  --sp-hero-line: rgba(255, 255, 255, 0.12);
+  --sp-hero-fill: rgba(255, 255, 255, 0.08);
+  --sp-hero-glow: radial-gradient(320px at 88% -20%, rgba(240, 201, 135, 0.28) 0%, rgba(14, 23, 40, 0) 70%),
+                  radial-gradient(260px at 0% 110%, rgba(123, 200, 176, 0.20) 0%, rgba(14, 23, 40, 0) 72%);
+
+  /* ---------- 圆角 ---------- */
+  --sp-radius-card: 16px;
+  --sp-radius-btn: 12px;
+  --sp-radius-tag: 8px;
+  --sp-radius-pill: 999px;
+
+  /* ---------- 间距 ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-pad-page: 16px;
+  --sp-gap-card: 12px;
+  /* 底部导航高度：48px 内容区 + 可点区域余量，iPhone 手势条另加 safe-area */
+  --sp-tabbar-h: 56px;
+  --sp-tap-min: 44px;
+
+  /* ---------- 阴影 ---------- */
+  --sp-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+  --sp-shadow-hover: 0 10px 24px rgba(15, 23, 42, 0.10);
+  --sp-shadow-hero: 0 16px 36px rgba(14, 23, 40, 0.28);
+
+  /* ---------- 动效 ---------- */
+  --sp-dur-micro: 150ms;
+  --sp-dur-comp: 250ms;
+  --sp-dur-page: 400ms;
+  --sp-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ---------- 字体 ---------- */
+  --sp-font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
+  --sp-font-num: 'SF Mono', 'DIN Alternate', ui-monospace, 'Menlo', monospace;
+  --sp-line-title: 1.2;
+  --sp-line-body: 1.6;
+
+  /* ---------- Vant 4 主题映射（让组件自动跟随品牌色） ---------- */
+  --van-primary-color: var(--sp-brand);
+  --van-success-color: var(--sp-teal);
+  --van-danger-color: var(--sp-danger);
+  --van-warning-color: var(--sp-warning);
+  --van-text-color: var(--sp-text);
+  --van-text-color-2: var(--sp-text-2);
+  --van-text-color-3: var(--sp-text-3);
+  --van-border-color: var(--sp-card-border);
+  --van-background: var(--sp-bg);
+  --van-background-2: var(--sp-card);
+  --van-radius-md: var(--sp-radius-btn);
+  --van-radius-lg: var(--sp-radius-card);
+  --van-tabbar-item-active-color: var(--sp-brand);
+  --van-nav-bar-background: transparent;
+  --van-nav-bar-title-text-color: var(--sp-text);
+  --van-nav-bar-icon-color: var(--sp-text);
+  --van-cell-group-inset-radius: var(--sp-radius-card);
+  --van-font-bold: 700;
+}

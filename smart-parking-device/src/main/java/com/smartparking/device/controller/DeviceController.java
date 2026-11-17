@@ -56,14 +56,18 @@ public class DeviceController {
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody Device device) {
         device.setId(id);
-        deviceService.updateById(device);
+        if (!deviceService.updateById(device)) {
+            return Result.fail(ErrorCode.DEVICE_NOT_FOUND);
+        }
         return Result.success();
     }
 
     @Operation(summary = "删除设备")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        deviceService.removeById(id);
+        if (!deviceService.removeById(id)) {
+            return Result.fail(ErrorCode.DEVICE_NOT_FOUND);
+        }
         return Result.success();
     }
 

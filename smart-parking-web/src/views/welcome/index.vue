@@ -57,12 +57,10 @@
       </div>
     </section>
 
-    <!-- ============ ③ 数字指标区 ============ -->
+    <!-- ============ ③ 平台能力区 ============ -->
     <section ref="statsRef" class="section stats">
-      <div class="stat reveal" v-for="(s, i) in statList" :key="i">
-        <b class="stat-num sp-num">
-          <span :ref="el => setNumRef(el, i)">0</span><span v-if="s.suffix" class="stat-suffix">{{ s.suffix }}</span>
-        </b>
+      <div class="stat reveal" v-for="(s, i) in statList" :key="i" :style="{ transitionDelay: i * 80 + 'ms' }">
+        <b class="stat-num">{{ s.value }}</b>
         <span class="stat-label">{{ s.label }}</span>
       </div>
     </section>
@@ -127,11 +125,16 @@ const features = [
   { icon: '◈', title: '设备联动', desc: '摄像头、道闸、地磁、显示屏统一接入，MQTT 实时联动，设备在线率随时可查。' }
 ]
 
+/*
+ * 原为「486 总车位 / 68.5% 利用率 / ¥2,847 收入 / 98.5% 在线率」硬编码假数据（E2E 报告 P2-3）。
+ * 欢迎页在登录前渲染，拿不到需要 JWT 的统计接口，写死数字会误导使用者，
+ * 因此改为不提数值的能力描述。
+ */
 const statList = [
-  { value: 486, suffix: '', label: '总车位' },
-  { value: 68.5, suffix: '%', label: '实时利用率' },
-  { value: 2847, suffix: '', label: '今日收入（元）' },
-  { value: 98.5, suffix: '%', label: '设备在线率' }
+  { value: '实时', label: '车位状态同步' },
+  { value: '无感', label: '车牌识别通行' },
+  { value: '闭环', label: '计费 · 支付 · 对账' },
+  { value: '联动', label: '设备 MQTT 实时联动' }
 ]
 
 const flowSteps = [
@@ -145,25 +148,6 @@ const modules = [
   '通知中心', '操作审计', '数据统计', '车位预约', '业主端 H5'
 ]
 
-/* ---------- 数字滚动 ---------- */
-const numEls = []
-const setNumRef = (el, i) => {
-  if (el && !numEls[i]) numEls[i] = el
-}
-
-const animateNum = (el, target, decimals) => {
-  const dur = 800
-  const start = performance.now()
-  const step = (now) => {
-    const p = Math.min(1, (now - start) / dur)
-    const eased = 1 - Math.pow(1 - p, 3)
-    const v = target * eased
-    el.textContent = decimals > 0 ? v.toFixed(decimals) : Math.round(v).toLocaleString()
-    if (p < 1) requestAnimationFrame(step)
-  }
-  requestAnimationFrame(step)
-}
-
 /* ---------- 滚动入场（IntersectionObserver） ---------- */
 const featuresRef = ref(null)
 const statsRef = ref(null)
@@ -172,6 +156,12 @@ const moduleRef = ref(null)
 let observer = null
 
 const observeReveal = () => {
+  // 兜底：不支持 IntersectionObserver 时直接全部显示，避免内容永久停留在 opacity:0
+  if (typeof IntersectionObserver === 'undefined') {
+    document.querySelectorAll('.reveal').forEach((el) => el.classList.add('in'))
+    return
+  }
+
   observer = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
       if (e.isIntersecting) {
@@ -182,19 +172,6 @@ const observeReveal = () => {
   }, { threshold: 0.15 })
 
   document.querySelectorAll('.reveal').forEach((el) => observer.observe(el))
-
-  // 数字滚动：统计区进入视口时触发一次
-  const statsObs = new IntersectionObserver((entries) => {
-    entries.forEach((e) => {
-      if (e.isIntersecting) {
-        statList.forEach((s, i) => {
-          if (numEls[i]) animateNum(numEls[i], s.value, s.value % 1 !== 0 ? 1 : 0)
-        })
-        statsObs.disconnect()
-      }
-    })
-  }, { threshold: 0.4 })
-  statsObs.observe(statsRef.value)
 }
 
 /* ---------- 交互 ---------- */
@@ -427,8 +404,8 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 12px;
-    opacity: 0;
-    animation: rise 0.9s var(--sp-ease) 0.15s forwards;
+    /* 入场动效：隐藏交给 keyframes 的 from 帧，元素本身默认可见（动画失效也不黑屏） */
+    animation: rise 0.9s var(--sp-ease) 0.15s both;
   }
 
   .nav-logo {
@@ -491,8 +468,7 @@ onMounted(() => {
     cursor: pointer;
     font-family: inherit;
     transition: all 0.35s var(--sp-ease);
-    opacity: 0;
-    animation: rise 0.9s var(--sp-ease) 0.15s forwards;
+    animation: rise 0.9s var(--sp-ease) 0.15s both;
 
     &:hover {
       background: rgba(123, 200, 176, 0.12);
@@ -522,8 +498,7 @@ onMounted(() => {
   padding: 8px 22px;
   background: rgba(123, 200, 176, 0.06);
   margin-bottom: 32px;
-  opacity: 0;
-  animation: rise 0.9s var(--sp-ease) 0.3s forwards;
+  animation: rise 0.9s var(--sp-ease) 0.3s both;
 }
 
 .hero-title {
@@ -539,9 +514,7 @@ onMounted(() => {
   -webkit-background-clip: text;
   background-clip: text;
   filter: drop-shadow(0 0 50px rgba(123, 200, 176, 0.14));
-  opacity: 0;
-  transform: translateY(30px);
-  animation: rise 0.9s var(--sp-ease) 0.5s forwards;
+  animation: rise 0.9s var(--sp-ease) 0.5s both;
 
   em {
     font-style: normal;
@@ -566,8 +539,7 @@ onMounted(() => {
   text-indent: 0.42em;
   color: var(--sp-text-2);
   font-weight: 300;
-  opacity: 0;
-  animation: rise 0.9s var(--sp-ease) 1.1s forwards;
+  animation: rise 0.9s var(--sp-ease) 1.1s both;
 
   b {
     color: var(--sp-gold);
@@ -580,8 +552,7 @@ onMounted(() => {
   gap: 18px;
   flex-wrap: wrap;
   justify-content: center;
-  opacity: 0;
-  animation: rise 0.9s var(--sp-ease) 1.3s forwards;
+  animation: rise 0.9s var(--sp-ease) 1.3s both;
 }
 
 .btn {
@@ -632,8 +603,7 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   margin-bottom: 36px;
-  opacity: 0;
-  animation: rise 0.9s var(--sp-ease) 1.6s forwards;
+  animation: rise 0.9s var(--sp-ease) 1.6s both;
   cursor: default;
 
   .mascot-star {
@@ -670,9 +640,7 @@ onMounted(() => {
   transform: translateX(-50%);
   color: rgba(147, 163, 191, 0.4);
   font-size: 18px;
-  animation: hint-bounce 2s ease-in-out infinite;
-  opacity: 0;
-  animation: rise 0.9s var(--sp-ease) 2s forwards, hint-bounce 2s ease-in-out 2.5s infinite;
+  animation: hint-bounce 2s ease-in-out 2.5s infinite;
 }
 
 /* ============ 通用区块 ============ */
@@ -962,6 +930,7 @@ onMounted(() => {
 }
 
 @keyframes rise {
+  from { opacity: 0; transform: translateY(30px); }
   to { opacity: 1; transform: translateY(0); }
 }
 

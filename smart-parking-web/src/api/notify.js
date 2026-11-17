@@ -35,11 +35,13 @@ export function getUnreadCount(userId) {
   })
 }
 
-// 发送通知（管理员）
-export function sendNotify(data) {
+// 管理员群发通知（POST body：{title, content, type, target(0全体/1指定), userId}）
+// 注意：这里不是 /notify/send（那是「给单个用户发一条」），群发走 /notify/admin/send，
+// 网关对 /api/notify/admin/** 做了管理端角色校验。
+export function sendAdminNotify(data) {
   return request({
-    url: '/notify/send',
+    url: '/notify/admin/send',
     method: 'post',
-    params: data
+    data
   })
 }

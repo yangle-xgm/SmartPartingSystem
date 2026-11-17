@@ -69,3 +69,21 @@ export function mockCamera(deviceNo, plateNo, confidence) {
     params: { deviceNo, plateNo, confidence }
   })
 }
+
+// 模拟出口摄像头识别（触发自动结算出场+道闸联动）
+export function mockExitCamera(deviceNo, plateNo) {
+  return request({
+    url: '/device/mock/exit-camera',
+    method: 'post',
+    params: { deviceNo, plateNo }
+  })
+}
+
+// 门岗手动出场放行（指定车牌直接结算出场）
+export function gateExit(deviceNo, plateNo) {
+  return request({
+    url: '/device/gate/exit',
+    method: 'post',
+    params: { deviceNo, plateNo }
+  })
+}

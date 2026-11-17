@@ -42,13 +42,23 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
     @Value("${smart-parking.reserve-max-hours:2}")
     private int reserveMaxHours;
 
+    /**
+     * 预约开始时间的时钟容差（秒）。
+     * 前端测试 D1：用户打开预约弹窗到点「确认预约」之间存在秒级延迟，
+     * 若后端严格用 {@code now()} 比较，会把刚预填的整分钟时刻判为"已过去"而必然失败。
+     * 这里放宽 60 秒，与前端 {@code submitReserve} 的容差保持同一把尺。
+     */
+    private static final long RESERVE_TIME_TOLERANCE_SECONDS = 60L;
+
     @Override
     public Page<ParkingSpace> pageList(Page<ParkingSpace> page, ParkingSpaceQuery query, Long communityId) {
+        // D12：小区管理页需要按小区取真实车位数，显式 query 入参优先于网关透传的小区头
+        Long effectiveCommunity = query.getCommunityId() != null ? query.getCommunityId() : communityId;
         LambdaQueryWrapper<ParkingSpace> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StringUtils.hasText(query.getArea()), ParkingSpace::getArea, query.getArea())
                 .eq(query.getType() != null, ParkingSpace::getType, query.getType())
                 .eq(query.getStatus() != null, ParkingSpace::getStatus, query.getStatus())
-                .eq(communityId != null, ParkingSpace::getCommunityId, communityId)
+                .eq(effectiveCommunity != null, ParkingSpace::getCommunityId, effectiveCommunity)
                 .orderByAsc(ParkingSpace::getSpaceNo);
         return this.page(page, wrapper);
     }
@@ -154,7 +164,7 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
                 .eq(Reservation::getUserId, userId)
                 .eq(Reservation::getStatus, 0));
         if (myActive >= 3) {
-            throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "进行中的预约已达上限（3个），请先取消或等待入场");
+            throw new BizException(ErrorCode.RESERVATION_LIMIT_EXCEEDED, "进行中的预约已达上限（3个），请先取消或等待入场");
         }
 
         // 时段校验与冲突检查必须先于车位锁定，保证被拒绝的预约请求不产生任何副作用
@@ -167,19 +177,20 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
                 s = java.time.LocalDateTime.parse(startTime.replace(" ", "T"));
                 e = java.time.LocalDateTime.parse(endTime.replace(" ", "T"));
             } catch (Exception ex) {
-                throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "预约时间格式不正确");
+                throw new BizException(ErrorCode.RESERVE_TIME_INVALID, "预约时间格式不正确");
             }
             if (!e.isAfter(s)) {
-                throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "结束时间必须晚于开始时间");
+                throw new BizException(ErrorCode.RESERVE_TIME_INVALID, "结束时间必须晚于开始时间");
             }
             // E2E 报告 P1-4：时长上限与"不得早于当前"此前只在前端校验，此处下沉到后端与前端同源。
             // 上限配置化（默认 2 小时），前后端按同一把尺拦截；恰好等于上限放行，超过才拒绝。
             if (java.time.Duration.between(s, e).toMinutes() > reserveMaxHours * 60L) {
-                throw new BizException(ErrorCode.SPACE_UNAVAILABLE,
+                throw new BizException(ErrorCode.RESERVE_TIME_INVALID,
                         "预约时长不能超过 " + reserveMaxHours + " 小时");
             }
-            if (s.isBefore(java.time.LocalDateTime.now())) {
-                throw new BizException(ErrorCode.SPACE_UNAVAILABLE, "预约开始时间不得早于当前时间");
+            // D1：允许 60 秒内的时钟漂移，避免"打开弹窗即提交"被判非法（与前端容差一致）
+            if (s.isBefore(java.time.LocalDateTime.now().minusSeconds(RESERVE_TIME_TOLERANCE_SECONDS))) {
+                throw new BizException(ErrorCode.RESERVE_TIME_INVALID, "预约开始时间不得早于当前时间");
             }
             // 时段冲突：同一车位存在进行中预约且时段重叠 → 拒绝
             java.util.List<Reservation> conflicts = reservationMapper.selectList(
@@ -266,7 +277,7 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
     @Override
     public void toggleShare(Long spaceId, Integer isShared) {
         ParkingSpace space = this.getById(spaceId);
-        if (space == null) throw new RuntimeException("车位不存在");
+        if (space == null) throw new BizException(ErrorCode.SPACE_NOT_FOUND);
         space.setIsShared(isShared);
         this.updateById(space);
     }

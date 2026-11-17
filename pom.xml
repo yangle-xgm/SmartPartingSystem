@@ -152,6 +152,18 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                  surefire 统一到 3.x：Maven 默认的 2.12.4 不识别 JUnit 5，
+                  导致 user/notify/device/stats 等模块的 @Test 全被静默跳过（Tests run: 0）。
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                    <configuration>
+                        <useModulePath>false</useModulePath>
+                    </configuration>
+                </plugin>
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>

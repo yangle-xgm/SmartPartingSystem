@@ -1,98 +1,272 @@
+/* ============================================================
+   全局基础样式（明暗双主题，全部走 tokens.css 的 --sp-* 变量）
+   ------------------------------------------------------------
+   品牌页：根容器 .dark（欢迎页 / 登录 / 注册）
+   管理端：根容器 .light（Layout）
+   任何写死色值都会让另一端主题错乱，禁止。
+   ============================================================ */
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   font-family: var(--sp-font, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif);
+  color: var(--sp-text);
+  background: var(--sp-bg);
 }
 
 #app {
   height: 100%;
 }
 
-// 滚动条样式（深色）
+::selection {
+  background: var(--sp-gold-soft);
+  color: var(--sp-text);
+}
+
+/* ---------- 滚动条 ---------- */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background-color: var(--sp-card-border);
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.28);
+  background-color: var(--sp-text-3);
 }
 
 ::-webkit-scrollbar-track {
   background-color: transparent;
 }
 
-// NProgress样式覆盖（星光金）
+/* ---------- NProgress（星光金） ---------- */
 #nprogress .bar {
-  background: var(--sp-gold, #F0C987) !important;
+  background: var(--sp-gold) !important;
+  height: 2px;
 }
 
-// 表格深色微调
-.el-table {
-  --el-table-header-bg-color: rgba(255, 255, 255, 0.03);
-  --el-table-tr-bg-color: transparent;
-  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.05);
-  --el-table-border-color: rgba(255, 255, 255, 0.06);
-  background-color: transparent !important;
+#nprogress .peg {
+  box-shadow: 0 0 10px var(--sp-gold), 0 0 5px var(--sp-gold);
+}
 
-  th {
-    background-color: rgba(255, 255, 255, 0.03) !important;
-    color: var(--sp-text-2, #93A3BF);
+/* ---------- 表格：跟随主题 ---------- */
+.el-table {
+  --el-table-header-bg-color: var(--sp-surface-2);
+  --el-table-tr-bg-color: transparent;
+  --el-table-row-hover-bg-color: var(--sp-hover-bg);
+  --el-table-border-color: var(--sp-card-border);
+  --el-table-text-color: var(--sp-text-2);
+  --el-table-header-text-color: var(--sp-text);
+  background-color: transparent;
+  font-size: 13.5px;
+
+  th.el-table__cell {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .el-table__cell {
+    padding: 11px 0;
+  }
+
+  .cell {
+    padding: 0 14px;
+    line-height: 1.5;
+  }
+
+  &::before,
+  &::after {
+    display: none;
+  }
+}
+
+/* ---------- 卡片 ---------- */
+.el-card {
+  --el-card-bg-color: var(--sp-card);
+  --el-card-border-color: var(--sp-card-border);
+  --el-card-padding: 20px;
+  border-radius: var(--sp-radius-card);
+  color: var(--sp-text);
+  transition: box-shadow var(--sp-dur-comp) var(--sp-ease), transform var(--sp-dur-comp) var(--sp-ease);
+
+  &.is-hover-shadow:hover {
+    box-shadow: var(--sp-shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  .el-card__header {
+    border-bottom: 1px solid var(--sp-divider);
+    padding: 16px 20px;
+    font-weight: 600;
+    color: var(--sp-text);
+  }
+}
+
+/* ---------- 弹窗 / 抽屉 ---------- */
+.el-dialog,
+.el-drawer,
+.el-message-box {
+  /* 三件套缺一不可：Element Plus 的 drawer 有自己的 --el-drawer-bg-color，
+     它默认回落到 --el-dialog-bg-color → --el-bg-color，显式写全避免漏配 */
+  --el-drawer-bg-color: var(--sp-surface);
+  --el-dialog-bg-color: var(--sp-surface);
+  --el-bg-color: var(--sp-surface);
+  /* 显式声明文字色，不再依赖 body 的继承值（跨主题时容易白底白字） */
+  color: var(--sp-text-2);
+  border-radius: var(--sp-radius-card);
+}
+
+.el-drawer__body,
+.el-dialog__body {
+  color: var(--sp-text-2);
+}
+
+.el-dialog {
+  border: 1px solid var(--sp-card-border);
+  box-shadow: var(--sp-shadow-hover);
+}
+
+.el-dialog__title,
+.el-drawer__title {
+  font-weight: 700;
+  color: var(--sp-text);
+}
+
+.el-dialog__body {
+  color: var(--sp-text-2);
+}
+
+/* ---------- 输入类控件 ---------- */
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-date-editor {
+  background-color: var(--sp-surface) !important;
+  box-shadow: 0 0 0 1px var(--sp-card-border) inset !important;
+  border-radius: var(--sp-radius-btn);
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--sp-brand) inset, 0 0 0 3px var(--sp-brand-soft) !important;
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  color: var(--sp-text) !important;
+}
+
+/* ---------- 表单标签 ---------- */
+.el-form-item__label {
+  color: var(--sp-text-2);
+  font-weight: 500;
+}
+
+/* ---------- 分页 ---------- */
+.el-pagination {
+  padding: 0;
+  --el-pagination-bg-color: transparent;
+  --el-pagination-text-color: var(--sp-text-2);
+  --el-pagination-button-disabled-bg-color: transparent;
+  justify-content: flex-end;
+
+  button,
+  .el-pager li {
+    border-radius: 8px;
+    background: transparent;
+    color: var(--sp-text-2);
+  }
+
+  .el-pager li.is-active {
+    background: var(--sp-brand);
+    color: #fff;
     font-weight: 600;
   }
 }
 
-// 卡片深色微调
-.el-card {
-  --el-card-bg-color: rgba(255, 255, 255, 0.04);
-  border-radius: var(--sp-radius-card, 16px);
-  border-color: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+/* ---------- 标签：统一胶囊化 ---------- */
+.el-tag {
+  border-radius: var(--sp-radius-pill);
+  font-weight: 500;
+  border: none;
+  padding: 0 10px;
 }
 
-// 分页样式
-.el-pagination {
-  padding: 0;
+/* ---------- 下拉菜单 / 提示 ---------- */
+.el-popper.is-light {
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-card-border) !important;
+  box-shadow: var(--sp-shadow-hover);
 }
 
-// 页面容器统一深色
-.el-main {
-  background: transparent;
+.el-dropdown-menu__item:hover {
+  background: var(--sp-hover-bg);
+  color: var(--sp-brand);
 }
 
-// 弹窗 / 抽屉深色
-.el-dialog,
-.el-drawer {
-  --el-dialog-bg-color: #16122B;
-  --el-bg-color: #16122B;
+/* ---------- 空态 ---------- */
+.el-empty {
+  --el-empty-description-margin-top: 12px;
+  padding: 28px 0;
 }
 
-.el-dialog {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--sp-radius-card, 16px);
+.el-empty__description p {
+  color: var(--sp-text-3);
 }
 
-// 输入框 / 下拉深色
-.el-input__wrapper,
-.el-select__wrapper,
-.el-textarea__inner {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset !important;
+/* ---------- Tabs ---------- */
+.el-tabs__item {
+  color: var(--sp-text-2);
+  font-weight: 500;
+
+  &.is-active {
+    color: var(--sp-brand);
+  }
 }
 
-.el-input__wrapper.is-focus,
-.el-select__wrapper.is-focused {
-  box-shadow: 0 0 0 1px var(--sp-teal, #7BC8B0) inset !important;
+.el-tabs__active-bar {
+  background: var(--sp-brand);
+}
+
+.el-tabs__nav-wrap::after {
+  background: var(--sp-divider);
+}
+
+/* ---------- Loading 遮罩跟随主题 ---------- */
+.el-loading-mask {
+  background-color: var(--sp-card);
+  opacity: 0.72;
+  backdrop-filter: blur(2px);
+}
+
+/* ---------- 路由切换动效 ---------- */
+@keyframes sp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sp-enter {
+  animation: sp-fade-up var(--sp-dur-page) var(--sp-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-enter {
+    animation: none;
+  }
 }

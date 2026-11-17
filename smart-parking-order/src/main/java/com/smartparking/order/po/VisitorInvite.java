@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -26,7 +27,8 @@ public class VisitorInvite implements Serializable {
     @Schema(description = "邀请业主ID")
     private Long userId;
 
-    @Schema(description = "访客车牌号（AES加密存储）")
+    @Schema(description = "访客车牌号（AES加密存储，不对外输出）")
+    @JsonIgnore
     private String plateNo;
 
     @Schema(description = "邀请码（6位）")

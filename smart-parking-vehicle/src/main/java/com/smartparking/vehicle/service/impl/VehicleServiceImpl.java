@@ -2,6 +2,8 @@ package com.smartparking.vehicle.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.common.core.utils.AesUtils;
 import com.smartparking.vehicle.client.AuditClient;
 import com.smartparking.vehicle.dto.RecognizeResult;
@@ -36,10 +38,12 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
                 .orderByDesc(Vehicle::getCreateTime);
         List<Vehicle> vehicles = this.list(wrapper);
 
-        // 脱敏车牌号
+        // 车牌解密后返回前端展示（DB 内仍为 AES 密文），同时给出脱敏值供列表渲染
         vehicles.forEach(v -> {
             if (StringUtils.hasText(v.getPlateNo())) {
-                v.setPlateNoMasked(AesUtils.maskPlate(AesUtils.decrypt(v.getPlateNo())));
+                String plain = AesUtils.decrypt(v.getPlateNo());
+                v.setPlateNo(plain);
+                v.setPlateNoMasked(AesUtils.maskPlate(plain));
             }
         });
 
@@ -53,7 +57,7 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
         Long count = this.count(new LambdaQueryWrapper<Vehicle>()
                 .eq(Vehicle::getPlateNo, encryptedPlate));
         if (count > 0) {
-            throw new RuntimeException("该车牌已绑定");
+            throw new BizException(ErrorCode.DATA_DUPLICATE, "该车牌已绑定");
         }
 
         // 加密存储车牌号
@@ -65,13 +69,20 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
             vehicle.setPlateColor("蓝");
         }
 
+        // 保存前留下明文，供审计脱敏与返回解密使用
+        String plainPlate = AesUtils.decrypt(vehicle.getPlateNo());
+
         this.save(vehicle);
         vehicleStatsMetrics.onBind();
 
         // 操作审计：绑定车辆
         auditClient.record(vehicle.getOwnerId(), null, "绑定车辆", "POST /api/vehicle/bind",
-                "{\"plateNo\":\"" + AesUtils.maskPlate(AesUtils.decrypt(vehicle.getPlateNo()))
+                "{\"plateNo\":\"" + AesUtils.maskPlate(plainPlate)
                         + "\",\"ownerId\":" + vehicle.getOwnerId() + "}", true);
+
+        // 返回给前端时还原为明文并补脱敏值，避免把 AES 密文吐出去（与列表接口保持一致）
+        vehicle.setPlateNo(plainPlate);
+        vehicle.setPlateNoMasked(AesUtils.maskPlate(plainPlate));
         return vehicle;
     }
 
@@ -79,12 +90,12 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
     public void unbindVehicle(Long vehicleId, Long userId) {
         Vehicle vehicle = this.getById(vehicleId);
         if (vehicle == null) {
-            throw new RuntimeException("车辆不存在");
+            throw new BizException(ErrorCode.VEHICLE_NOT_FOUND);
         }
         // 业主只能解绑自己的车；管理员/超管可解绑任意车辆
         boolean isAdmin = isAdminOperator();
         if (!isAdmin && !vehicle.getOwnerId().equals(userId)) {
-            throw new RuntimeException("无权操作此车辆");
+            throw new BizException(ErrorCode.FORBIDDEN, "无权操作此车辆");
         }
         this.removeById(vehicleId);
 
@@ -129,7 +140,7 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
     public void updateStatus(Long vehicleId, Integer status) {
         Vehicle vehicle = this.getById(vehicleId);
         if (vehicle == null) {
-            throw new RuntimeException("车辆不存在");
+            throw new BizException(ErrorCode.VEHICLE_NOT_FOUND);
         }
         vehicle.setStatus(status);
         this.updateById(vehicle);
@@ -139,7 +150,7 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
     public void renewMonthly(Long vehicleId) {
         Vehicle vehicle = this.getById(vehicleId);
         if (vehicle == null) {
-            throw new RuntimeException("车辆不存在");
+            throw new BizException(ErrorCode.VEHICLE_NOT_FOUND);
         }
         java.time.LocalDateTime base = vehicle.getMonthlyExpire() != null
                 && vehicle.getMonthlyExpire().isAfter(java.time.LocalDateTime.now())
@@ -189,7 +200,7 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
                 result.setPlateNoMasked(vehicle.getPlateNoMasked());
                 result.setMessage("该车辆已被列入黑名单，禁止入场");
                 auditClient.record(null, null, "黑名单拦截", "POST /api/vehicle/recognize",
-                        java.util.Map.of("plateNo", plateNo, "blocked", true), true);
+                        java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "blocked", true), true);
                 return result;
             }
             result.setRecognized(true);

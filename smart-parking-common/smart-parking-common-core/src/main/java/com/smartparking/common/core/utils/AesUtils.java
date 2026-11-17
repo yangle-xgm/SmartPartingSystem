@@ -63,6 +63,22 @@ public class AesUtils {
     }
 
     /**
+     * 安全解密（用于对外返回前的字段还原）
+     * 解密失败或原本就是明文时，原样返回，兼容历史明文数据
+     */
+    public static String decryptSafe(String cipherOrPlain) {
+        if (cipherOrPlain == null || cipherOrPlain.isEmpty()) {
+            return cipherOrPlain;
+        }
+        try {
+            String plain = decrypt(cipherOrPlain);
+            return plain != null ? plain : cipherOrPlain;
+        } catch (Exception e) {
+            return cipherOrPlain;
+        }
+    }
+
+    /**
      * 手机号脱敏：138****1234
      */
     public static String maskPhone(String phone) {
