@@ -1,0 +1,16 @@
+{
+  "name": "smart-parking-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "智慧停车系统端到端测试（Playwright）",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:pc": "playwright test --project=pc-ui",
+    "test:h5": "playwright test --project=h5-ui",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.2"
+  }
+}
