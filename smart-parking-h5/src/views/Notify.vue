@@ -2,7 +2,10 @@
   <div class="h-page">
     <header class="h-hero">
       <div class="h-hero__top">
-        <div>
+        <button class="h-hero__back" type="button" aria-label="返回" @click="goBack">
+          <van-icon name="arrow-left" />
+        </button>
+        <div class="h-hero__lead">
           <span class="h-hero__eyebrow">NOTIFICATIONS</span>
           <h1 class="h-hero__title">通知中心</h1>
           <p class="h-hero__desc">入场、出场、缴费提醒与物业公告</p>
@@ -79,10 +82,12 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { showSuccessToast } from 'vant'
 import { getNotifyList, markNotifyRead, markAllNotifyRead } from '@/api/notify'
 import { getUserId } from '@/api/user'
 
+const router = useRouter()
 const userId = getUserId()
 
 const list = ref([])
@@ -112,6 +117,16 @@ const visibleList = computed(() =>
 function shortTime(t) {
   if (!t) return ''
   return String(t).replace('T', ' ').slice(5, 16)
+}
+
+/**
+ * 返回上一页。
+ * 通知中心不是 Tab（无底部导航），从首页/我的进来时走 history.back 回到来处；
+ * 直接打开 /notify 时没有历史栈，back() 会退出浏览器，故兜底 replace 到首页。
+ */
+function goBack() {
+  if (window.history.state && window.history.state.back) router.back()
+  else router.replace('/home')
 }
 
 onMounted(() => loadData())
