@@ -203,7 +203,8 @@ class OrderInternalApiContractTest {
     void confirmPayment_missingOrderId_returnsFailContract() throws Exception {
         mockMvc.perform(post("/api/order/internal/confirm-payment").param("amount", "25.50"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                // DEF-02：缺参数统一 PARAM_INVALID(400)，不再用模糊的 500
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 }

@@ -1,32 +1,12 @@
 package com.smartparking.payment.handler;
 
-import com.smartparking.common.core.domain.Result;
-import com.smartparking.common.core.exception.BizException;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.ExceptionHandler;
+import com.smartparking.common.core.handler.BaseGlobalExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * 全局异常处理器
+ * 全局异常处理器：统一实现见 common-core 的 BaseGlobalExceptionHandler
+ * （前端功能测试 DEF-02：约束类异常映射成人话，未处理异常不再回显 SQL 与堆栈）
  */
-@Slf4j
 @RestControllerAdvice
-public class GlobalExceptionHandler {
-
-    @ExceptionHandler(BizException.class)
-    public Result<Void> handleBizException(BizException e) {
-        log.warn("业务异常: code={}, msg={}", e.getCode(), e.getMessage());
-        return Result.fail(e.getCode(), e.getMessage());
-    }
-    @ExceptionHandler(RuntimeException.class)
-    public Result<Void> handleRuntimeException(RuntimeException e) {
-        log.error("业务异常：{}", e.getMessage(), e);
-        return Result.fail(e.getMessage());
-    }
-
-    @ExceptionHandler(Exception.class)
-    public Result<Void> handleException(Exception e) {
-        log.error("系统异常：{}", e.getMessage(), e);
-        return Result.fail("系统内部错误，请联系管理员");
-    }
+public class GlobalExceptionHandler extends BaseGlobalExceptionHandler {
 }

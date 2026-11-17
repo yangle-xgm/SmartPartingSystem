@@ -75,8 +75,12 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
         BigDecimal monthIncome = queryPaidIncome(monthStart, today);
         dashboard.put("monthIncome", monthIncome);
 
-        // 当前在场车辆数：以订单服务进行中订单数为准（含昨日入场未出场车辆）
-        long currentParked = queryOngoingCount();
+        // 当前在场车辆数（DEF-07）：以车位服务实时占用数为准，和"已占用 N"同源；
+        // 车位服务不可用时退回订单服务进行中订单数，再退回当日进出场差值。
+        long currentParked = queryOccupiedSpaces();
+        if (currentParked < 0) {
+            currentParked = queryOngoingCount();
+        }
         if (currentParked < 0) {
             currentParked = Math.max(0, todayEntry - todayExit);
         }
@@ -101,17 +105,56 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
                 .le(ParkingStats::getStatDate, endDate)
                 .orderByAsc(ParkingStats::getStatDate));
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("dates", statsList.stream().map(ParkingStats::getStatDate).toList());
-        result.put("totalSpaces", statsList.stream().map(ParkingStats::getTotalSpaces).toList());
-        result.put("occupiedSpaces", statsList.stream().map(ParkingStats::getOccupiedSpaces).toList());
+        // DEF-08：统计表里没有的日期原来直接丢点，导致"只有 1 天数据 + 平均利用率 0.0%"。
+        // 现在按日期区间逐日补齐：缺失日占用记 0，总车位取当前车位数；今天缺失时用实时占用数兜底。
+        Map<java.time.LocalDate, ParkingStats> byDate = new java.util.HashMap<>();
+        for (ParkingStats item : statsList) {
+            byDate.put(item.getStatDate(), item);
+        }
+        int[] live = querySpaceCounts();
+        int fallbackTotal = live != null && live[0] > 0 ? live[0] : currentTotalSpaces(statsList);
+        int liveOccupied = live != null ? Math.max(0, live[1]) : 0;
+        LocalDate today = LocalDate.now();
 
-        // 计算平均利用率
-        double avgOccupancy = statsList.stream()
-                .mapToDouble(s -> s.getTotalSpaces() == null || s.getTotalSpaces() == 0 ? 0.0 : s.getOccupiedSpaces() * 1.0 / s.getTotalSpaces())
-                .average()
-                .orElse(0.0);
+        List<String> dates = new java.util.ArrayList<>();
+        List<Integer> totalSpaces = new java.util.ArrayList<>();
+        List<Integer> occupiedSpaces = new java.util.ArrayList<>();
+        // 平均利用率只在"有统计口径的日期"上算：缺失日补 0 只是为了图表连续，
+        // 若把它们算进平均会把整体拉成接近 0（原来就是 0.0%）。
+        java.util.List<Double> validRates = new java.util.ArrayList<>();
+        for (LocalDate day = startDate; !day.isAfter(endDate); day = day.plusDays(1)) {
+            ParkingStats row = byDate.get(day);
+            int total = fallbackTotal;
+            int occupied = 0;
+            boolean hasData = row != null;
+            if (row != null) {
+                if (row.getTotalSpaces() != null && row.getTotalSpaces() > 0) {
+                    total = row.getTotalSpaces();
+                }
+                if (row.getOccupiedSpaces() != null) {
+                    occupied = row.getOccupiedSpaces();
+                }
+            } else if (day.equals(today) && fallbackTotal > 0) {
+                occupied = Math.min(liveOccupied, fallbackTotal);
+                hasData = true;
+            }
+            dates.add(day.toString());
+            totalSpaces.add(total);
+            occupiedSpaces.add(occupied);
+            if (hasData) {
+                validRates.add(total > 0 ? occupied * 1.0 / total : 0.0);
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("dates", dates);
+        result.put("totalSpaces", totalSpaces);
+        result.put("occupiedSpaces", occupiedSpaces);
+
+        double avgOccupancy = validRates.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         result.put("avgOccupancy", Math.round(avgOccupancy * 100) / 100.0);
+        result.put("liveOccupied", liveOccupied);
+        result.put("liveTotal", fallbackTotal);
 
         redisTemplate.opsForValue().set(cacheKey, result, 30, TimeUnit.SECONDS);
         return result;
@@ -235,6 +278,48 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
         } catch (Exception e) {
             return BigDecimal.ZERO;
         }
+    }
+
+    /**
+     * 查询车位服务实时占用数；失败返回 -1（调用方回退其他口径）
+     */
+    private long queryOccupiedSpaces() {
+        int[] counts = querySpaceCounts();
+        return counts == null ? -1 : Math.max(0, counts[1]);
+    }
+
+    /**
+     * 车位服务实时总车位/占用数（内部接口 /api/parking/internal/occupancy-summary）；失败返回 null
+     */
+    private int[] querySpaceCounts() {
+        try {
+            java.util.Map<String, Object> resp = restTemplate.getForObject(
+                    parkingUrl + "/api/parking/internal/occupancy-summary", java.util.Map.class);
+            Object data = resp == null ? null : resp.get("data");
+            if (data instanceof java.util.Map<?, ?> m) {
+                int total = m.get("total") instanceof Number t ? t.intValue() : 0;
+                int occupied = m.get("occupied") instanceof Number o ? o.intValue() : 0;
+                if (total > 0 || occupied > 0) {
+                    return new int[]{total, occupied};
+                }
+            }
+        } catch (Exception e) {
+            log.warn("查询车位实时占用失败：{}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 统计表里最近一次的总车位数（车位服务不可用时兜底）
+     */
+    private int currentTotalSpaces(List<ParkingStats> statsList) {
+        int total = 0;
+        for (ParkingStats s : statsList) {
+            if (s.getTotalSpaces() != null && s.getTotalSpaces() > 0) {
+                total = s.getTotalSpaces();
+            }
+        }
+        return total;
     }
 
     /**

@@ -36,14 +36,33 @@ public class NotificationController {
     @Value("${smart-parking.gateway-url:http://localhost:8080}")
     private String gatewayUrl;
 
+    /**
+     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header，
+     * 缺省值与网关 gateway.internal-token 保持一致，生产用 SP_INTERNAL_TOKEN 统一覆盖。
+     */
+    @Value("${smart-parking.internal-token:SmartParking-Internal-2026}")
+    private String internalToken;
+
     private final RestTemplate restTemplate = buildRestTemplate();
 
-    private static RestTemplate buildRestTemplate() {
+    /**
+     * 内部调用一律带上 X-Internal-Token，否则网关会以 403 拦截，广播通知会静默失败。
+     * 拦截器内延迟读取 internalToken，保证 @Value 注入完成后再取值。
+     */
+    private RestTemplate buildRestTemplate() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory =
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(5000);
-        return new RestTemplate(factory);
+        RestTemplate template = new RestTemplate(factory);
+        template.getInterceptors().add((request, body, execution) -> {
+            if (internalToken != null && !internalToken.isBlank()) {
+                request.getHeaders().set(
+                        com.smartparking.common.core.constant.Constants.INTERNAL_TOKEN_HEADER, internalToken);
+            }
+            return execution.execute(request, body);
+        });
+        return template;
     }
 
     @Operation(summary = "发送通知")
@@ -152,12 +171,15 @@ public class NotificationController {
     @Operation(summary = "未读数量")
     @GetMapping("/unread/count")
     public Result<Long> unreadCount(
-            @Parameter(description = "用户ID") @RequestParam Long userId,
+            @Parameter(description = "用户ID（业主可省略，取当前登录人）") @RequestParam(required = false) Long userId,
             @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
             @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
         // E2E 报告 P1-6：业主(role=0)忽略入参 userId，强制只统计本人的未读
-        if ("0".equals(currentRole) && currentUserId != null) {
+        if (currentUserId != null && (userId == null || "0".equals(currentRole))) {
             userId = Long.valueOf(currentUserId);
+        }
+        if (userId == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "缺少 userId");
         }
         long count = notificationService.getUnreadCount(userId);
         return Result.success(count);

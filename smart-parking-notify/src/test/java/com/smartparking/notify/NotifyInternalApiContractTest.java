@@ -111,7 +111,8 @@ class NotifyInternalApiContractTest {
                         .param("plateNo", "京A12345")
                         .param("spaceNo", "A-001"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                // DEF-02：缺参数统一 PARAM_INVALID(400)
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 }

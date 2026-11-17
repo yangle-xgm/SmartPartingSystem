@@ -25,6 +25,11 @@ public enum ErrorCode {
     FORBIDDEN(403, "无权限访问"),
     NOT_FOUND(404, "资源不存在"),
 
+    // 数据约束（前端功能测试 DEF-02：不允许把数据库异常原文抛给用户）
+    DATA_DUPLICATE(409, "数据已存在，请勿重复提交"),
+    DATA_INVALID(4001, "数据不合法，请检查输入"),
+    OPERATION_FAILED(4002, "操作未生效，数据可能已被删除"),
+
     // 用户/认证 51xx
     LOGIN_FAILED(5101, "用户名或密码错误"),
     USER_DISABLED(5102, "账号已被禁用"),
@@ -37,6 +42,10 @@ public enum ErrorCode {
     SPACE_FULL(5203, "暂无空闲车位"),
     RESERVATION_NOT_FOUND(5204, "预约记录不存在"),
     RESERVATION_ALREADY_FINISHED(5205, "预约已结束或已取消"),
+    // 前端测试 D2：时间参数错误原复用 SPACE_UNAVAILABLE(5202)，前端字典把它翻成
+    // 「车位当前不可预约或已被占用」，与真实原因（时间不合法）矛盾，故单列错误码。
+    RESERVE_TIME_INVALID(5206, "预约时间不合法"),
+    RESERVATION_LIMIT_EXCEEDED(5207, "进行中的预约已达上限"),
 
     // 订单 53xx
     ORDER_NOT_FOUND(5301, "订单不存在"),

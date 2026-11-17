@@ -76,7 +76,8 @@ class StatsInternalApiContractTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\":25.50}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                // DEF-02：缺参数统一 PARAM_INVALID(400)
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 }

@@ -3,6 +3,8 @@ package com.smartparking.notify.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.notify.mapper.FeedbackMapper;
 import com.smartparking.notify.po.Feedback;
 import io.swagger.v3.oas.annotations.Operation;
@@ -62,12 +64,21 @@ public class FeedbackController {
     @Operation(summary = "管理员回复反馈")
     @PostMapping("/{id}/reply")
     public Result<Void> reply(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String reply = body == null ? null : body.get("reply");
+        if (reply == null || reply.isBlank()) {
+            throw new BizException(ErrorCode.DATA_INVALID, "回复内容不能为空");
+        }
         Feedback fb = feedbackMapper.selectById(id);
-        if (fb == null) return Result.success(null);
-        fb.setReply(body.get("reply"));
+        if (fb == null) {
+            throw new BizException(ErrorCode.FEEDBACK_NOT_FOUND);
+        }
+        fb.setReply(reply);
         fb.setStatus(2);
         fb.setReplyTime(LocalDateTime.now());
-        feedbackMapper.updateById(fb);
+        // 0 行受影响说明记录已被并发删除，不能当成功返回
+        if (feedbackMapper.updateById(fb) <= 0) {
+            throw new BizException(ErrorCode.FEEDBACK_NOT_FOUND);
+        }
         return Result.success();
     }
 }

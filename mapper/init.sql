@@ -37,8 +37,9 @@ CREATE TABLE `sys_user` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_username` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `username`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_username` (`username`),
+  UNIQUE KEY `uk_username_alive` (`alive_username`),
   KEY `idx_phone` (`phone`),
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户表';
@@ -60,8 +61,9 @@ CREATE TABLE `parking_space` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_space_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `space_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_space_no` (`space_no`),
+  UNIQUE KEY `uk_space_no_alive` (`alive_space_no`),
   KEY `idx_status_area` (`status`, `area`),
   KEY `idx_owner_id` (`owner_id`),
   CONSTRAINT `fk_space_owner` FOREIGN KEY (`owner_id`) REFERENCES `sys_user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
@@ -84,8 +86,9 @@ CREATE TABLE `vehicle` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_plate_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `plate_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_plate_no` (`plate_no`),
+  UNIQUE KEY `uk_plate_no_alive` (`alive_plate_no`),
   KEY `idx_owner_id` (`owner_id`),
   CONSTRAINT `fk_vehicle_owner` FOREIGN KEY (`owner_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='车辆表';
@@ -135,8 +138,9 @@ CREATE TABLE `parking_order` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_order_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `order_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_order_no` (`order_no`),
+  UNIQUE KEY `uk_order_no_alive` (`alive_order_no`),
   KEY `idx_vehicle_id` (`vehicle_id`),
   KEY `idx_plate_no` (`plate_no`),
   KEY `idx_space_id` (`space_id`),
@@ -165,8 +169,9 @@ CREATE TABLE `payment_record` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_pay_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `pay_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_pay_no` (`pay_no`),
+  UNIQUE KEY `uk_pay_no_alive` (`alive_pay_no`),
   KEY `idx_order_id` (`order_id`),
   KEY `idx_user_id` (`user_id`),
   CONSTRAINT `fk_payment_order` FOREIGN KEY (`order_id`) REFERENCES `parking_order` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -189,8 +194,9 @@ CREATE TABLE `device` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_device_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `device_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_device_no` (`device_no`)
+  UNIQUE KEY `uk_device_no_alive` (`alive_device_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='设备表';
 
 -- ============================================================
@@ -251,8 +257,9 @@ CREATE TABLE `parking_stats` (
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  `alive_date_area` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, CONCAT(`stat_date`, '|', `area`), NULL)) STORED COMMENT '仅未删除行有值（D4）',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_date_area` (`stat_date`, `area`)
+  UNIQUE KEY `uk_date_area_alive` (`alive_date_area`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='统计数据表';
 
 -- ============================================================

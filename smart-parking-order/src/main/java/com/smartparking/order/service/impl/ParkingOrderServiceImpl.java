@@ -136,7 +136,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
         runAfterCommit(() -> {
             try {
                 auditClient.record(currentUserId(), null, "车辆入场", "POST /api/order/entry",
-                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", plateNo, "spaceNo", spaceNo), true);
+                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", AesUtils.maskPlate(plateNo), "spaceNo", spaceNo), true);
             } catch (Exception e) { log.warn("入场审计记录失败: {}", e.getMessage()); }
             Map<String, Object> m = new HashMap<>();
             m.put("orderId", order.getId());
@@ -180,16 +180,18 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
         this.updateById(order);
 
-        // 远程操作移到提交后（车牌密文用于内部审计/MQ，返回前端时再解密）
+        // 远程操作移到提交后。车牌在 DB 是密文，不同用途要不同形态：
+        // MQ 需要明文（notify 按车牌反查车主），审计只留脱敏值（避免密文乱码/明文中台留存）
         Long finalSpaceId = order.getSpaceId();
         LocalDateTime finalExitTime = exitTime;
         long finalMinutes = minutes;
         BigDecimal finalAmount = amount;
-        final String finalPlateCipher = order.getPlateNo();
+        final String finalPlateForMq = decryptPlateNo(order);
+        final String finalPlateMasked = AesUtils.maskPlate(finalPlateForMq);
         runAfterCommit(() -> {
             try {
                 auditClient.record(currentUserId(), null, "车辆出场", "POST /api/order/exit/{orderNo}",
-                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", finalPlateCipher,
+                        java.util.Map.of("orderNo", order.getOrderNo(), "plateNo", finalPlateMasked,
                                 "amount", finalAmount, "duration", finalMinutes), true);
             } catch (Exception e) { log.warn("出场审计失败: {}", e.getMessage()); }
             try { parkingSpaceClient.updateStatus(finalSpaceId, 0); }
@@ -198,7 +200,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             message.put("orderId", order.getId());
             message.put("orderNo", order.getOrderNo());
             message.put("vehicleId", order.getVehicleId());
-            message.put("plateNo", finalPlateCipher);
+            message.put("plateNo", finalPlateForMq);
             message.put("spaceId", finalSpaceId);
             message.put("exitTime", finalExitTime);
             message.put("duration", finalMinutes);
@@ -586,7 +588,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
         // 5. 操作审计：设备联动入场
         auditClient.record(null, null, "设备联动入场", "POST /api/order/internal/device-entry",
-                java.util.Map.of("plateNo", plateNo, "confidence", conf, "deviceNo", deviceNo,
+                java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "confidence", conf, "deviceNo", deviceNo,
                         "orderNo", order.getOrderNo(), "spaceNo", spaceNo), true);
         return result;
     }
@@ -622,7 +624,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             result.put("spaceNo", completed.getSpaceNo());
             result.put("message", "出场结算完成");
             auditClient.record(null, null, "设备联动出场", "POST /api/order/internal/device-exit",
-                    java.util.Map.of("plateNo", plateNo, "deviceNo", deviceNo,
+                    java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "deviceNo", deviceNo,
                             "orderNo", completed.getOrderNo(),
                             "amount", completed.getAmount() == null ? 0 : completed.getAmount()), true);
             return result;
@@ -646,12 +648,12 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             if (parsed.get("code") != null && "200".equals(String.valueOf(parsed.get("code")))) {
                 return (Map<String, Object>) parsed.get("data");
             }
-            throw new RuntimeException("车牌识别服务异常");
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "车牌识别服务异常，请稍后重试");
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             log.error("调用车牌识别失败：plateNo={}, err={}", plateNo, e.getMessage());
-            throw new RuntimeException("车牌识别服务不可用");
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "车牌识别服务不可用，请稍后重试");
         }
     }
 

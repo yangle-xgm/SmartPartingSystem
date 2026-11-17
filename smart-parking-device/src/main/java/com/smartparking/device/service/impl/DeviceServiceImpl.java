@@ -3,6 +3,8 @@ package com.smartparking.device.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.smartparking.common.core.exception.BizException;
+import com.smartparking.common.core.exception.ErrorCode;
 import com.smartparking.device.mapper.DeviceMapper;
 import com.smartparking.device.po.Device;
 import com.smartparking.device.query.DeviceQuery;
@@ -323,21 +325,23 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     public void updateStatus(String deviceNo, Integer status) {
         Device device = this.getOne(new LambdaQueryWrapper<Device>()
                 .eq(Device::getDeviceNo, deviceNo));
-        if (device != null) {
-            device.setStatus(status);
-            this.updateById(device);
-            deviceCache.put(deviceNo, device);
+        // 设备不存在时不能静默成功，否则调用方以为状态已更新
+        if (device == null) {
+            throw new BizException(ErrorCode.DEVICE_NOT_FOUND);
         }
+        device.setStatus(status);
+        this.updateById(device);
+        deviceCache.put(deviceNo, device);
     }
 
     @Override
     public void openGate(String deviceNo) {
         Device device = getDeviceByNo(deviceNo);
         if (device == null || device.getDeviceType() != 1) {
-            throw new RuntimeException("设备不存在或不是道闸");
+            throw new BizException(ErrorCode.DEVICE_NOT_FOUND, "设备不存在或不是道闸");
         }
         if (device.getStatus() != 1) {
-            throw new RuntimeException("道闸离线，无法控制");
+            throw new BizException(ErrorCode.GATE_ERROR, "道闸离线，无法控制");
         }
 
         // 发送MQTT指令
@@ -349,10 +353,10 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     public void closeGate(String deviceNo) {
         Device device = getDeviceByNo(deviceNo);
         if (device == null || device.getDeviceType() != 1) {
-            throw new RuntimeException("设备不存在或不是道闸");
+            throw new BizException(ErrorCode.DEVICE_NOT_FOUND, "设备不存在或不是道闸");
         }
         if (device.getStatus() != 1) {
-            throw new RuntimeException("道闸离线，无法控制");
+            throw new BizException(ErrorCode.GATE_ERROR, "道闸离线，无法控制");
         }
 
         // 发送MQTT指令

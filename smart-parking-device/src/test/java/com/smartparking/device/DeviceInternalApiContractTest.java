@@ -74,7 +74,8 @@ class DeviceInternalApiContractTest {
     void updateStatus_missingStatus_returnsFailContract() throws Exception {
         mockMvc.perform(put("/api/device/internal/CAM-001/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                // DEF-02：缺参数统一 PARAM_INVALID(400)
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 }

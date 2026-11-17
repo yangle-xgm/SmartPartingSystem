@@ -84,13 +84,13 @@ class PaymentInternalApiContractTest {
     }
 
     @Test
-    @DisplayName("GET /internal/income-summary：非法日期按 RuntimeException 转 Result.fail（消费者回退统计表）")
+    @DisplayName("GET /internal/income-summary：非法日期转 Result.fail(400)（消费者回退统计表）")
     void incomeSummary_invalidDate_returnsFailContract() throws Exception {
         mockMvc.perform(get("/api/payment/internal/income-summary")
                         .param("startDate", "not-a-date")
                         .param("endDate", "2026-10-31"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 

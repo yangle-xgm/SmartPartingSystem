@@ -104,7 +104,8 @@ class UserInternalApiContractTest {
         mockMvc.perform(post("/api/audit/internal/record")
                         .param("method", "POST /api/order/internal/device-entry"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(500))
+                // DEF-02 修复后缺参数统一走 PARAM_INVALID(400)，不再是模糊的 500
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
     }
 

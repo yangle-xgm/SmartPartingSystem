@@ -39,3 +39,9 @@ unpacked_template/
 
 # ===== 本地设备服务临时目录 =====
 smart-parking-device-service-*/
+
+# ===== 本地联调日志 =====
+run-logs/
+
+# ===== 运行时上传文件（用户头像等，不入库） =====
+uploads/
