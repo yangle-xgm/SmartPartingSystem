@@ -43,7 +43,9 @@ const routes = [
     name: 'Notify',
     component: () => import('@/views/Notify.vue'),
     meta: { title: '通知中心' }
-  }
+  },
+  // 未知地址回首页，避免整页空白
+  { path: '/:pathMatch(.*)*', redirect: '/home' }
 ]
 
 const router = createRouter({

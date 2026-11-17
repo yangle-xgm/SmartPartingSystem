@@ -4,6 +4,23 @@ import 'nprogress/nprogress.css'
 import { useUserStore } from '@/store/user'
 import { getRole } from '@/api/user'
 
+/** 深色品牌页：欢迎 / 登录 / 注册 / 站内 H5 */
+const BRAND_PATHS = ['/welcome', '/login', '/register']
+
+/**
+ * 主题同步到 <html>。
+ * 管理端的 .light 若只挂在 Layout 的 div 上，所有通过 teleport 渲染到 body 的弹层
+ * （el-drawer 在 append-to-body=false 时仍留在原位，而 ElMessageBox / 下拉 popper 会挂 body）
+ * 就会拿不到浅色变量，且继承 body 按 :root 深色算出的浅色文字，导致白底浅字的“空白弹窗”。
+ *
+ * 必须定义在下面任何调用之前：const 声明存在暂时性死区，
+ * 在定义前引用会抛 ReferenceError，且 vite build 是静态分析，查不出来。
+ */
+const applyTheme = (to) => {
+  const isBrand = to.meta.theme === 'dark' || to.path.startsWith('/h5') || BRAND_PATHS.includes(to.path)
+  document.documentElement.classList.toggle('light', !isBrand)
+}
+
 const routes = [
   {
     path: '/welcome',
@@ -99,7 +116,7 @@ const routes = [
         path: 'statistics',
         name: 'Statistics',
         component: () => import('@/views/statistics/index.vue'),
-        meta: { title: '数据统计', icon: 'TrendCharts', roles: [2] }
+        meta: { title: '数据统计', icon: 'TrendCharts', roles: [1, 2] }
       },
       {
         path: 'notification',
@@ -144,6 +161,19 @@ const routes = [
         meta: { title: '个人中心' }
       }
     ]
+  },
+  {
+    // 404 兜底：必须放最后。否则未命中的地址 Vue Router 不会渲染任何组件，
+    // 页面只剩 <!---->（E2E 报告 P1-9 整页纯白）。
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/views/error/NotFound.vue'),
+    meta: {
+      title: '页面不存在',
+      requiresAuth: false,
+      theme: 'dark',            // 404 是深色品牌页，不套管理端浅色令牌
+      skipMobileRedirect: true  // 移动端也展示 404，而不是跳 H5 首页掩盖错误地址
+    }
   }
 ]
 
@@ -152,13 +182,22 @@ const router = createRouter({
   routes
 })
 
+// 首屏在守卫执行前先按地址预置主题，避免管理端打开瞬间闪一下深色
+applyTheme({ path: window.location.pathname, meta: {} })
+
 router.beforeEach((to, from, next) => {
   NProgress.start()
+  applyTheme(to)
   document.title = to.meta.title ? `${to.meta.title} - 智慧停车` : '智慧停车'
 
-  // 移动端 UA 自动跳 H5 端（登录/注册/欢迎页除外）
+  // 移动端 UA 自动跳 H5 端（登录/注册/欢迎/404 页除外）
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
-  if (isMobile && !to.path.startsWith('/h5') && !['/login', '/register', '/welcome'].includes(to.path)) {
+  if (
+    isMobile &&
+    !to.meta.skipMobileRedirect &&
+    !to.path.startsWith('/h5') &&
+    !['/login', '/register', '/welcome'].includes(to.path)
+  ) {
     next('/h5/home')
     return
   }

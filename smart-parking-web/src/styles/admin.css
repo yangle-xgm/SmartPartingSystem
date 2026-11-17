@@ -1,0 +1,456 @@
+/* ============================================================
+   智慧星河 · 管理端设计系统（V6）
+   ------------------------------------------------------------
+   只消费 tokens.css 的 --sp-* 变量，供 views/* 复用。
+   组成：页头 / 工具条 / 指标卡 / 内容卡 / 图例 / 空态 / 装饰
+   ============================================================ */
+
+/* ---------------- 页面骨架 ---------------- */
+.sp-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  animation: sp-fade-up var(--sp-dur-page) var(--sp-ease) both;
+}
+
+/* ---------------- 页头 ---------------- */
+.sp-head {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: 22px 26px;
+  border-radius: var(--sp-radius-card);
+  border: 1px solid var(--sp-card-border);
+  background:
+    radial-gradient(600px at 100% 0%, var(--sp-brand-soft) 0%, transparent 62%),
+    radial-gradient(420px at 0% 120%, var(--sp-teal-soft) 0%, transparent 60%),
+    var(--sp-surface);
+  overflow: hidden;
+}
+
+/* 星轨装饰：右上角细弧线，呼应「星河」品牌 */
+.sp-head::after {
+  content: '';
+  position: absolute;
+  right: -60px;
+  top: -78px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 1px solid var(--sp-card-border);
+  box-shadow: 0 0 0 24px transparent, inset 0 0 60px var(--sp-brand-soft);
+  pointer-events: none;
+}
+
+.sp-head__main {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.sp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sp-brand);
+  margin-bottom: 8px;
+}
+
+.sp-eyebrow::before {
+  content: '';
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--sp-grad-brand);
+}
+
+.sp-title {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--sp-text);
+  line-height: 1.2;
+}
+
+.sp-desc {
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--sp-text-2);
+  line-height: 1.6;
+  max-width: 72ch;
+}
+
+.sp-head__actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---------------- 工具条（筛选区） ---------------- */
+.sp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: var(--sp-radius-card);
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface);
+}
+
+.sp-toolbar .el-form-item {
+  margin: 0;
+}
+
+.sp-toolbar__right {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* ---------------- 指标卡 ---------------- */
+.sp-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--sp-4);
+}
+
+.sp-stat {
+  position: relative;
+  padding: 18px 20px 16px;
+  border-radius: var(--sp-radius-card);
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface);
+  overflow: hidden;
+  transition: transform var(--sp-dur-comp) var(--sp-ease), box-shadow var(--sp-dur-comp) var(--sp-ease);
+}
+
+.sp-stat::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--sp-grad-brand);
+  opacity: 0.9;
+}
+
+.sp-stat:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sp-shadow-hover);
+}
+
+.sp-stat__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.sp-stat__label {
+  font-size: 13px;
+  color: var(--sp-text-2);
+  font-weight: 500;
+}
+
+.sp-stat__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 17px;
+  background: var(--sp-brand-soft);
+  color: var(--sp-brand);
+}
+
+.sp-stat__value {
+  margin-top: 12px;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--sp-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-stat__unit {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sp-text-3);
+  letter-spacing: 0;
+}
+
+.sp-stat__foot {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--sp-text-3);
+}
+
+/* 色调变体 */
+.sp-stat[data-tone='teal']::before { background: linear-gradient(180deg, var(--sp-teal), var(--sp-brand)); }
+.sp-stat[data-tone='teal'] .sp-stat__icon { background: var(--sp-teal-soft); color: var(--sp-teal); }
+
+.sp-stat[data-tone='gold']::before { background: var(--sp-grad-gold); }
+.sp-stat[data-tone='gold'] .sp-stat__icon { background: var(--sp-gold-soft); color: var(--sp-gold); }
+
+.sp-stat[data-tone='danger']::before { background: linear-gradient(180deg, var(--sp-danger), var(--sp-rose)); }
+.sp-stat[data-tone='danger'] .sp-stat__icon { background: var(--sp-danger-soft); color: var(--sp-danger); }
+
+.sp-stat[data-tone='warning']::before { background: linear-gradient(180deg, var(--sp-warning), var(--sp-gold)); }
+.sp-stat[data-tone='warning'] .sp-stat__icon { background: var(--sp-warning-soft); color: var(--sp-warning); }
+
+/* ---------------- 内容卡 ---------------- */
+.sp-card {
+  padding: var(--sp-5);
+  border-radius: var(--sp-radius-card);
+  border: 1px solid var(--sp-card-border);
+  background: var(--sp-surface);
+}
+
+.sp-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.sp-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sp-text);
+}
+
+.sp-card__title::before {
+  content: '';
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--sp-grad-brand);
+}
+
+.sp-card__sub {
+  font-size: 12px;
+  color: var(--sp-text-3);
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+/* ---------------- 图例 / 状态点 ---------------- */
+.sp-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--sp-text-2);
+}
+
+.sp-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sp-brand);
+  display: inline-block;
+  flex: none;
+}
+
+.sp-dot[data-tone='free'] { background: var(--sp-teal); box-shadow: 0 0 0 3px var(--sp-teal-soft); }
+.sp-dot[data-tone='used'] { background: var(--sp-brand); box-shadow: 0 0 0 3px var(--sp-brand-soft); }
+.sp-dot[data-tone='book'] { background: var(--sp-warning); box-shadow: 0 0 0 3px var(--sp-warning-soft); }
+.sp-dot[data-tone='fix'] { background: var(--sp-danger); box-shadow: 0 0 0 3px var(--sp-danger-soft); }
+
+/* ---------------- 空态 ---------------- */
+.sp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 46px 0;
+  color: var(--sp-text-3);
+  text-align: center;
+}
+
+.sp-empty__star {
+  font-size: 30px;
+  color: var(--sp-gold);
+  opacity: 0.7;
+  animation: sp-twinkle 2.4s var(--sp-ease) infinite;
+}
+
+.sp-empty__text {
+  font-size: 13px;
+}
+
+@keyframes sp-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.96); }
+  50% { opacity: 0.95; transform: scale(1.04); }
+}
+
+/* ---------------- 能力名片（体现项目特色） ---------------- */
+.sp-feature-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.sp-feature {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--sp-card-border);
+  background: var(--sp-surface-2);
+  transition: border-color var(--sp-dur-micro) var(--sp-ease), background var(--sp-dur-micro) var(--sp-ease);
+}
+
+.sp-feature:hover {
+  border-color: var(--sp-brand);
+  background: var(--sp-brand-soft);
+}
+
+.sp-feature__icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--sp-surface);
+  color: var(--sp-brand);
+  font-size: 16px;
+  border: 1px solid var(--sp-card-border);
+}
+
+.sp-feature__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sp-text);
+}
+
+.sp-feature__desc {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--sp-text-3);
+  line-height: 1.5;
+}
+
+/* ---------------- 邀请码大字 ---------------- */
+.sp-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: var(--sp-gold-soft);
+  border: 1px dashed var(--sp-gold);
+  font-family: 'SFMono-Regular', ui-monospace, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--sp-gold);
+}
+
+/* ---------------- 车牌样式 ---------------- */
+.sp-plate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-family: 'SFMono-Regular', ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(135deg, #3B5B9E, #27407A);
+}
+
+.sp-plate[data-color='绿'] { background: linear-gradient(135deg, #2E9E7C, #1F7A5E); }
+.sp-plate[data-color='黄'] { background: linear-gradient(135deg, #C98F2F, #A06F1F); }
+
+/* ---------------- 数据行（详情） ---------------- */
+.sp-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+
+.sp-kv__item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sp-surface-2);
+}
+
+.sp-kv__k {
+  font-size: 11.5px;
+  color: var(--sp-text-3);
+  letter-spacing: 0.04em;
+}
+
+.sp-kv__v {
+  margin-top: 5px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sp-text);
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+
+/* ---------------- 进度条 ---------------- */
+.sp-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sp-surface-3);
+  overflow: hidden;
+}
+
+.sp-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sp-grad-brand);
+  transition: width var(--sp-dur-page) var(--sp-ease);
+}
+
+/* ---------------- 响应式 ---------------- */
+@media (max-width: 900px) {
+  .sp-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .sp-head__actions {
+    justify-content: flex-start;
+  }
+
+  .sp-title {
+    font-size: 20px;
+  }
+}

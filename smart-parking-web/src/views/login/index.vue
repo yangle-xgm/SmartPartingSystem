@@ -60,18 +60,23 @@
           </div>
         </div>
 
+        <!--
+          此处原为「486 总车位 / 68.5% 利用率 / ¥2,847 今日收入」硬编码假数据（E2E 报告 P2-3）。
+          登录页在鉴权前，拿不到真实的统计接口（/api/stats/** 需 JWT），
+          写死数字只会对外误导，故改为不含数值的能力描述。
+        -->
         <div class="brand-stats">
           <div class="stat">
-            <b class="sp-num">486</b>
-            <span>总车位</span>
+            <b class="sp-num">实时</b>
+            <span>车位状态同步</span>
           </div>
           <div class="stat">
-            <b class="sp-num">68.5%</b>
-            <span>实时利用率</span>
+            <b class="sp-num">无感</b>
+            <span>车牌识别通行</span>
           </div>
           <div class="stat">
-            <b class="sp-num gold">¥2,847</b>
-            <span>今日收入</span>
+            <b class="sp-num gold">闭环</b>
+            <span>计费 · 支付 · 对账</span>
           </div>
         </div>
 
@@ -151,6 +156,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
+import { toastOnce } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 
 import { getCaptcha } from '@/api/user'
@@ -204,7 +210,7 @@ const handleLogin = async () => {
       ElMessage.success('登录成功')
       router.push('/dashboard')
     } catch (error) {
-      ElMessage.error(error.message || '登录失败')
+      toastOnce(error, '登录失败')
       loginForm.value.captcha = ''
       refreshCaptcha()
     } finally {
@@ -414,9 +420,7 @@ onMounted(() => {
     linear-gradient(160deg, rgba(124, 141, 181, 0.12) 0%, rgba(11, 10, 22, 0.35) 45%, rgba(11, 10, 22, 0.6) 100%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  opacity: 0;
-  transform: translateX(-24px);
-  animation: slide-left 0.9s var(--sp-ease) 0.15s forwards;
+  animation: slide-left 0.9s var(--sp-ease) 0.15s both;
 }
 
 .brand-glow {
@@ -705,9 +709,7 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-  opacity: 0;
-  transform: translateY(24px);
-  animation: rise 0.9s var(--sp-ease) 0.35s forwards;
+  animation: rise 0.9s var(--sp-ease) 0.35s both;
 }
 
 .form-header {
@@ -848,10 +850,12 @@ onMounted(() => {
 }
 
 @keyframes rise {
+  from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-left {
+  from { opacity: 0; transform: translateX(-24px); }
   to { opacity: 1; transform: translateX(0); }
 }
 

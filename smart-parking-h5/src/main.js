@@ -2,6 +2,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import Vant from 'vant'
 import 'vant/lib/index.css'
+import './styles/tokens.css'
+import './styles/mobile.css'
 import App from './App.vue'
 import router from './router'
 

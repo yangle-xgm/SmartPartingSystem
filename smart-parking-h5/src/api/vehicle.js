@@ -1,11 +1,15 @@
 import request from '@/utils/request'
 
-// 我的车辆列表
-export function getVehicleList(params) {
+/**
+ * 我的车辆列表
+ * 后端 GET /api/vehicle/list?userId= 直接返回 List<Vehicle>（不是分页 PageResult），
+ * 因此这里只接受 userId 一个参数，调用方按数组处理 res.data。
+ */
+export function getVehicleList(userId) {
   return request({
     url: '/vehicle/list',
     method: 'get',
-    params
+    params: { userId }
   })
 }
 

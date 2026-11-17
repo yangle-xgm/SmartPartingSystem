@@ -87,3 +87,12 @@ export function myReservations(userId) {
     params: { userId }
   })
 }
+
+// 切换车位共享状态（业主把闲置车位开放给临停）
+export function toggleSpaceShare(id, isShared) {
+  return request({
+    url: `/parking/space/${id}/share`,
+    method: 'put',
+    params: { isShared }
+  })
+}

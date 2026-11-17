@@ -93,6 +93,22 @@
   --sp-divider: rgba(255, 255, 255, 0.06);
   --sp-hover-bg: rgba(255, 255, 255, 0.06);
   --sp-active-grad: linear-gradient(135deg, rgba(124, 141, 181, 0.22), rgba(123, 200, 176, 0.14));
+
+  /* ---------- 语义表面层（明暗通用，供组件消费） ---------- */
+  --sp-surface: #16122B;                             /* 卡片实底 */
+  --sp-surface-2: rgba(255, 255, 255, 0.05);         /* 次级表面：表头/工具条 */
+  --sp-surface-3: rgba(255, 255, 255, 0.03);         /* 三级表面：分区块 */
+  --sp-brand-soft: rgba(124, 141, 181, 0.14);
+  --sp-teal-soft: rgba(123, 200, 176, 0.14);
+  --sp-gold-soft: rgba(240, 201, 135, 0.14);
+  --sp-danger-soft: rgba(217, 140, 140, 0.14);
+  --sp-warning-soft: rgba(224, 179, 106, 0.14);
+  --sp-grad-brand: linear-gradient(135deg, #7C8DB5 0%, #7BC8B0 100%);
+  --sp-grad-gold: linear-gradient(135deg, #F0C987 0%, #B48B9D 100%);
+  --sp-shadow-hover: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --sp-page-grad:
+    radial-gradient(1100px at 6% -12%, rgba(124, 141, 181, 0.16) 0%, rgba(11, 10, 22, 0) 58%),
+    radial-gradient(900px at 100% 0%, rgba(123, 200, 176, 0.10) 0%, rgba(11, 10, 22, 0) 52%);
 }
 
 /* ---------- 基础重置 ---------- */
@@ -157,7 +173,13 @@ html.dark, .dark {
 }
 
 /* ---------- 浅色分支（管理端 .light 容器，纯 CSS 变量切换） ---------- */
-.light {  --sp-bg: #F4F6FA;
+.light {
+  /* 关键：浅色容器必须显式声明文字色。
+     否则内部未单独设色的元素（抽屉/弹窗正文、第三方组件）会继承 body 上
+     按 :root 深色主题算出的浅色文字，出现“白底浅字 → 看起来空白”。 */
+  color: var(--sp-text);
+  background: var(--sp-bg);
+  --sp-bg: #F4F6FA;
   --sp-bg-grad: linear-gradient(160deg, #F8FAFD 0%, #F4F6FA 60%);
   --sp-card: #FFFFFF;
   --sp-card-border: #E6E9F0;
@@ -184,6 +206,22 @@ html.dark, .dark {
   --sp-hover-bg: rgba(35, 40, 56, 0.06);
   --sp-active-grad: linear-gradient(135deg, rgba(76, 111, 168, 0.10), rgba(46, 158, 124, 0.08));
 
+  /* ---------- 语义表面层（浅色管理端） ---------- */
+  --sp-surface: #FFFFFF;
+  --sp-surface-2: #F7F9FC;
+  --sp-surface-3: #EEF2F8;
+  --sp-brand-soft: rgba(76, 111, 168, 0.08);
+  --sp-teal-soft: rgba(46, 158, 124, 0.10);
+  --sp-gold-soft: rgba(176, 123, 36, 0.10);
+  --sp-danger-soft: rgba(194, 94, 94, 0.10);
+  --sp-warning-soft: rgba(201, 143, 47, 0.12);
+  --sp-grad-brand: linear-gradient(135deg, #4C6FA8 0%, #2E9E7C 100%);
+  --sp-grad-gold: linear-gradient(135deg, #E3B96B 0%, #B07B24 100%);
+  --sp-shadow-hover: 0 12px 30px rgba(15, 23, 42, 0.10);
+  --sp-page-grad:
+    radial-gradient(1200px at 4% -14%, rgba(76, 111, 168, 0.12) 0%, rgba(244, 246, 250, 0) 56%),
+    radial-gradient(900px at 100% 0%, rgba(46, 158, 124, 0.10) 0%, rgba(244, 246, 250, 0) 52%);
+
   /* Element Plus 浅色（管理端） */
   --el-color-primary: var(--sp-brand);
   --el-color-success: var(--sp-teal);
@@ -207,9 +245,12 @@ html.dark, .dark {
   --el-box-shadow-light: 0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
-/* 管理端浅色时 body 背景跟随（避免滚动边缘露出深色） */
-html:has(.layout-container.light) body {
-  background: #F4F6FA;
+/* 管理端浅色时 body 背景与文字跟随（覆盖 :root 的深色默认值，
+   同时让 teleport 到 body 的弹层也能拿到正确的浅色语汇） */
+html.light body,
+html:has(.layout.light) body {
+  background: var(--sp-bg);
+  color: var(--sp-text);
 }
 
 /* ---------- 无障碍：用户偏好减少动效 ---------- */

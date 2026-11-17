@@ -74,6 +74,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { toastOnce } from '@/utils/request'
 import { ElMessage } from 'element-plus'
 import { register } from '@/api/user'
 
@@ -136,7 +137,7 @@ const handleRegister = async () => {
       ElMessage.success('注册成功，请登录')
       router.push('/login')
     } catch (error) {
-      ElMessage.error(error.message || '注册失败')
+      toastOnce(error, '注册失败')
     } finally {
       loading.value = false
     }

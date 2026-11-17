@@ -11,6 +11,7 @@ import App from './App.vue'
 import router from './router'
 import './styles/tokens.css'
 import './assets/styles/index.scss'
+import './styles/admin.css'
 
 // 智慧星河 V5.3 明暗双主题：不再全局挂 dark
 // 品牌页（Welcome/Login/Register）根容器加 .dark，管理端 Layout 根容器加 .light，见 tokens.css
