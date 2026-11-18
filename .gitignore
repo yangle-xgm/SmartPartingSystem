@@ -42,6 +42,12 @@ smart-parking-device-service-*/
 
 # ===== 本地联调日志 =====
 run-logs/
+logs/
+
+# ===== Playwright E2E 产物（可重建，不入库） =====
+scripts/e2e/test-results/
+scripts/e2e/playwright-report/
+scripts/e2e/.tmp-results-*/
 
 # ===== 运行时上传文件（用户头像等，不入库） =====
 uploads/

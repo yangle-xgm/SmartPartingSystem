@@ -20,13 +20,25 @@ const SERVER_BUSY = '服务繁忙，请稍后再试'
 const NETWORK_ERROR = '网络异常，请检查网络连接'
 // 后端异常原文（SQL/堆栈）不在端上展示（DEF-02）
 const INTERNAL_MSG = /###|SQLState|SQL\b|MyBatis|java\.|Exception|Out of range|Data truncation/i
+/**
+ * 真正的「服务端故障」状态码。
+ * 注意不能用 `code >= 500` 判断：业务错误码是 5xxx（5201 车位不存在、5402 支付状态异常），
+ * 也满足 >= 500，一刀切会把"车位当前不可预约"这类有效文案吞成"服务繁忙"。
+ */
+const SERVER_ERROR_CODES = new Set([500, 502, 503, 504])
 
 function safeMessage(code, backendMsg) {
-  if (!backendMsg) return code >= 500 ? SERVER_BUSY : '请求失败'
+  // DEF-01：服务端故障一律用固定文案，不信任后端 message。
+  // 网关/框架回的「Internal Server Error」「Bad Gateway」既不命中 INTERNAL_MSG
+  // 也不超长，历史上被当成"干净业务文案"直接弹给用户。
+  if (SERVER_ERROR_CODES.has(code)) {
+    if (backendMsg) console.error('[api] server error:', backendMsg)
+    return SERVER_BUSY
+  }
+  if (!backendMsg) return '请求失败'
   // 含 SQL/堆栈关键字或异常长文本 → 不展示给用户，只写控制台
   if (INTERNAL_MSG.test(backendMsg) || backendMsg.length > 80) {
-    if (code >= 500) console.error('[api] server error:', backendMsg)
-    return code >= 500 ? SERVER_BUSY : '操作失败，请稍后重试'
+    return '操作失败，请稍后重试'
   }
   return backendMsg
 }
