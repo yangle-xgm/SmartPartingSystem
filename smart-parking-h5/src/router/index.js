@@ -27,6 +27,12 @@ const routes = [
     meta: { title: '我的订单', tab: true }
   },
   {
+    path: '/orders/:orderNo',
+    name: 'OrderDetail',
+    component: () => import('@/views/OrderDetail.vue'),
+    meta: { title: '订单详情' }
+  },
+  {
     path: '/invite',
     name: 'Invite',
     component: () => import('@/views/Invite.vue'),
@@ -61,6 +67,24 @@ const routes = [
     name: 'Reserve',
     component: () => import('@/views/Reserve.vue'),
     meta: { title: '车位预约' }
+  },
+  {
+    path: '/payments',
+    name: 'Payments',
+    component: () => import('@/views/Payments.vue'),
+    meta: { title: '支付记录' }
+  },
+  {
+    path: '/feedback',
+    name: 'Feedback',
+    component: () => import('@/views/Feedback.vue'),
+    meta: { title: '意见反馈' }
+  },
+  {
+    path: '/profile-edit',
+    name: 'ProfileEdit',
+    component: () => import('@/views/ProfileEdit.vue'),
+    meta: { title: '编辑资料' }
   },
   // 未知地址回首页，避免整页空白
   { path: '/:pathMatch(.*)*', redirect: '/home' }

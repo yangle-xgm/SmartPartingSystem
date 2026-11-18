@@ -309,7 +309,7 @@ test.describe('管理端 · 接口异常与响应式', () => {
     await expect(page.locator('.sp-stat-grid')).toBeVisible();
   });
 
-  test('移动端 UA 访问管理端自动跳到 H5 业主端', async ({ browser, request }) => {
+  test('移动端 UA 访问管理端落到业主端引导页', async ({ browser, request }) => {
     const token = await login(request, ADMIN);
     const ctx = await browser.newContext({
       userAgent:
@@ -320,7 +320,34 @@ test.describe('管理端 · 接口异常与响应式', () => {
 
     const page = await ctx.newPage();
     await page.goto('http://localhost:3000/dashboard');
-    await expect(page).toHaveURL(/\/h5\/home$/, { timeout: 20_000 });
+    // 管理端不再内嵌第二套 H5：手机一律落到引导页，并带上原目标路径
+    await expect(page).toHaveURL(/\/mobile-guide/, { timeout: 20_000 });
+    // 带上原目标路径，放行时可回跳（不依赖 URL 编码形式）
+    expect(new URL(page.url()).searchParams.get('to')).toBe('/dashboard');
+    await expect(page.locator('.mg__title')).toHaveText('业主请使用手机业主端');
+    // 业主端地址（dev 回落 3001）与跳转入口都在
+    await expect(page.locator('.mg__addr-url')).toHaveText('http://localhost:3001');
+    await expect(page.locator('.mg__btn--primary')).toHaveAttribute('href', 'http://localhost:3001');
+    await ctx.close();
+  });
+
+  test('移动端引导页「仍要使用管理端」可一次性放行', async ({ browser, request }) => {
+    const token = await login(request, ADMIN);
+    const ctx = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Linux; Android 13; 23127PN0CC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36',
+      viewport: { width: 390, height: 844 },
+    });
+    await ctx.addInitScript((t) => window.localStorage.setItem('token', t), token);
+
+    const page = await ctx.newPage();
+    await page.goto('http://localhost:3000/parking');
+    await expect(page).toHaveURL(/\/mobile-guide/, { timeout: 20_000 });
+
+    await page.locator('.mg__btn--ghost').click();
+    // 回到原目标页而不是固定 dashboard，且不再被守卫弹回引导页
+    await expect(page).toHaveURL(/\/parking$/, { timeout: 20_000 });
+    await expect(page.locator('.sp-title')).toHaveText('车位管理');
     await ctx.close();
   });
 

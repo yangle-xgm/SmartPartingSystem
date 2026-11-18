@@ -48,6 +48,14 @@ logs/
 scripts/e2e/test-results/
 scripts/e2e/playwright-report/
 scripts/e2e/.tmp-results-*/
+# Playwright 每次运行用的独立输出目录（--output=.tmp-xxx，避免 bulk-delete 守卫）
+scripts/e2e/.tmp-*/
 
 # ===== 运行时上传文件（用户头像等，不入库） =====
 uploads/
+
+# ===== 本地环境变量（.env.example 是模板，需保留入库） =====
+.env
+.env.local
+.env.*.local
+!.env.example

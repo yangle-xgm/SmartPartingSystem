@@ -248,6 +248,15 @@ const handleUnbind = async (v) => {
 </script>
 
 <style scoped>
+/*
+ * 右下角「绑定车辆」FAB 是 position:fixed，会压住最后一张卡片的「解绑」按钮。
+ * .h-page 的 padding-bottom 只给 TabBar 留了位，这里再补 FAB 高度（44）+ 底距（16）+ 呼吸（16），
+ * 保证最后一张卡片能整体滚出覆盖区（真机 1200×2670 复现的 OBS-02）。
+ */
+.h-body {
+  padding-bottom: 76px;
+}
+
 .car__head {
   display: flex;
   align-items: center;

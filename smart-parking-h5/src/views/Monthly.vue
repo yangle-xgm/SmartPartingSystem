@@ -116,6 +116,36 @@
           临时车位与访客车辆仍按临时车标准计费。
         </p>
       </template>
+
+      <div class="h-section">
+        <span class="h-section__title">充值记录</span>
+        <span class="h-section__more" @click="loadOrders">刷新</span>
+      </div>
+
+      <template v-if="ordersLoading">
+        <div class="h-sk h-sk--card" />
+      </template>
+      <template v-else-if="orders.length">
+        <div v-for="o in orders" :key="o.orderNo" class="h-card hist">
+          <div class="hist__head">
+            <span class="h-plate" data-color="蓝">{{ o.plateNo || '—' }}</span>
+            <span class="h-pill" :data-tone="histTone(o.payStatus)">{{ histText(o.payStatus) }}</span>
+          </div>
+          <div class="hist__row">
+            <span>续费 {{ o.months }} 个月</span>
+            <b>¥{{ money(o.amount) }}</b>
+          </div>
+          <div class="hist__row hist__row--muted">
+            <span>{{ shortTime(o.payTime || o.createTime) }}</span>
+            <span v-if="o.expireAfter">有效期至 {{ dateOnly(o.expireAfter) }}</span>
+          </div>
+        </div>
+      </template>
+      <div v-else class="h-card h-empty">
+        <van-icon name="bill-o" class="h-empty__icon" />
+        <div class="h-empty__title">还没有充值记录</div>
+        <div class="h-empty__hint">开通或续费月卡后，订单会保留在这里</div>
+      </div>
     </div>
 
     <!-- 底部支付栏 -->
@@ -150,7 +180,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showSuccessToast, showToast } from 'vant'
-import { getVehicleList, quoteMonthly, createMonthlyOrder, payMonthly } from '@/api/vehicle'
+import { getVehicleList, quoteMonthly, createMonthlyOrder, payMonthly, getMonthlyOrders } from '@/api/vehicle'
 import { getUserId } from '@/api/user'
 
 const router = useRouter()
@@ -165,6 +195,8 @@ const quote = ref(null)
 const quoting = ref(false)
 const payVisible = ref(false)
 const paying = ref(false)
+const orders = ref([])
+const ordersLoading = ref(true)
 
 const monthOptions = [
   { value: 1, label: '1 个月' },
@@ -183,7 +215,22 @@ const tempCount = computed(() => vehicles.value.filter((v) => !v.monthlyExpire).
 const unitPrice = computed(() => Number(quote.value?.unitPrice ?? 0))
 const canPay = computed(() => !!quote.value && !quoting.value && !paying.value)
 
-onMounted(loadVehicles)
+onMounted(() => {
+  loadVehicles()
+  loadOrders()
+})
+
+/** 充值记录：后端按 X-User-Id 只返回本人订单，车牌已解密 */
+async function loadOrders() {
+  try {
+    const res = await getMonthlyOrders()
+    orders.value = res.code === 200 ? (Array.isArray(res.data) ? res.data : []) : []
+  } catch {
+    orders.value = []
+  } finally {
+    ordersLoading.value = false
+  }
+}
 
 async function loadVehicles() {
   try {
@@ -253,7 +300,7 @@ async function onPaySelect(action) {
     const paid = await payMonthly(orderNo)
     if (paid.code === 200) {
       showSuccessToast(paid.data?.message || '充值成功')
-      await loadVehicles()
+      await Promise.all([loadVehicles(), loadOrders()])
     }
   } catch (e) {
     toastOnce(e, '充值失败')
@@ -297,6 +344,25 @@ function pillTone(v) {
 function pillText(v) {
   if (!v.monthlyExpire) return '临停'
   return isSoon(v.monthlyExpire) ? '即将到期' : '月卡有效'
+}
+
+function histText(s) {
+  if (s === 1) return '支付成功'
+  if (s === 2) return '支付失败'
+  if (s === 3) return '已取消'
+  return '待支付'
+}
+
+function histTone(s) {
+  if (s === 1) return 'teal'
+  if (s === 3) return 'muted'
+  if (s === 2) return 'danger'
+  return 'warning'
+}
+
+function shortTime(t) {
+  if (!t) return '—'
+  return String(t).replace('T', ' ').slice(0, 16)
 }
 
 function money(v) {
@@ -385,6 +451,30 @@ function money(v) {
   margin: var(--sp-3) 0 var(--sp-4);
   font-size: 12px;
   line-height: 1.7;
+  color: var(--sp-text-3);
+}
+
+/* 充值记录 */
+.hist + .hist { margin-top: var(--sp-gap-card); }
+.hist__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hist__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--sp-text);
+}
+.hist__row b {
+  font-family: var(--sp-font-num);
+  font-size: 15px;
+}
+.hist__row--muted {
+  font-size: 11px;
   color: var(--sp-text-3);
 }
 

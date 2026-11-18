@@ -16,6 +16,12 @@ management:
       application: ${spring.application.name}
 
 spring:
+  # 头像上传：Spring 默认单文件 1MB，前端允许 2MB，不放开会出现
+  # MaxUploadSizeExceededException（500）而不是可读的业务提示
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   flyway:
     # 默认开启：启动时自动执行 classpath:db/migration 下的增量脚本（各模块独立 history 表）。
     # 无 DB 的 CI 场景用环境变量 SP_FLYWAY_ENABLED=false 关闭。

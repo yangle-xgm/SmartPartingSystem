@@ -4,7 +4,7 @@ import 'nprogress/nprogress.css'
 import { useUserStore } from '@/store/user'
 import { getRole } from '@/api/user'
 
-/** 深色品牌页：欢迎 / 登录 / 注册 / 站内 H5 */
+/** 深色品牌页：欢迎 / 登录 / 注册（移动端引导页由 meta.theme 声明，不在此列） */
 const BRAND_PATHS = ['/welcome', '/login', '/register']
 
 /**
@@ -17,7 +17,7 @@ const BRAND_PATHS = ['/welcome', '/login', '/register']
  * 在定义前引用会抛 ReferenceError，且 vite build 是静态分析，查不出来。
  */
 const applyTheme = (to) => {
-  const isBrand = to.meta.theme === 'dark' || to.path.startsWith('/h5') || BRAND_PATHS.includes(to.path)
+  const isBrand = to.meta.theme === 'dark' || BRAND_PATHS.includes(to.path)
   document.documentElement.classList.toggle('light', !isBrand)
 }
 
@@ -41,17 +41,18 @@ const routes = [
     meta: { title: '业主注册', requiresAuth: false }
   },
   {
-    path: '/h5',
-    component: () => import('@/h5/layout.vue'),
-    meta: { title: '移动业主端' },
-    children: [
-      { path: '', redirect: '/h5/home' },
-      { path: 'home', name: 'H5Home', component: () => import('@/h5/home.vue'), meta: { title: '首页' } },
-      { path: 'reserve', name: 'H5Reserve', component: () => import('@/h5/reserve.vue'), meta: { title: '车位预约' } },
-      { path: 'orders', name: 'H5Orders', component: () => import('@/h5/orders.vue'), meta: { title: '我的订单' } },
-      { path: 'confirm-plate', name: 'H5ConfirmPlate', component: () => import('@/h5/confirm-plate.vue'), meta: { title: '车牌确认' } },
-      { path: 'profile', name: 'H5Profile', component: () => import('@/h5/profile.vue'), meta: { title: '我的' } }
-    ]
+    // 移动端落地页：业主端是独立工程 smart-parking-h5（端口 3001），
+    // 管理端不再内嵌第二套 H5。手机上打开管理端域名会被守卫送到这里，
+    // 由页面给出业主端地址与「仍要使用管理端」的一次性放行。
+    path: '/mobile-guide',
+    name: 'MobileGuide',
+    component: () => import('@/views/mobile-guide/index.vue'),
+    meta: {
+      title: '业主端',
+      requiresAuth: false,
+      theme: 'dark',
+      skipMobileRedirect: true
+    }
   },
   {
     path: '/',
@@ -190,15 +191,17 @@ router.beforeEach((to, from, next) => {
   applyTheme(to)
   document.title = to.meta.title ? `${to.meta.title} - 智慧停车` : '智慧停车'
 
-  // 移动端 UA 自动跳 H5 端（登录/注册/欢迎/404 页除外）
+  // 移动端 UA 落到引导页：业主端是独立工程 smart-parking-h5（3001），管理端不再内嵌第二套 H5。
+  // 登录/注册/欢迎/404/引导页自身除外；用户点过「仍要使用管理端」后写 sessionStorage 标记，
+  // 本次会话内放行（用 session 不用 local，避免手机上永久绕过后再也回不到引导页）。
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
   if (
     isMobile &&
     !to.meta.skipMobileRedirect &&
-    !to.path.startsWith('/h5') &&
-    !['/login', '/register', '/welcome'].includes(to.path)
+    !['/login', '/register', '/welcome'].includes(to.path) &&
+    sessionStorage.getItem('sp-mobile-bypass') !== '1'
   ) {
-    next('/h5/home')
+    next({ path: '/mobile-guide', query: { to: to.fullPath } })
     return
   }
 

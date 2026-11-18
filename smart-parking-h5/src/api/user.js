@@ -46,6 +46,27 @@ export function logout(userId) {
   })
 }
 
+// 修改本人资料（后端在 role=0 时强制用 X-User-Id 覆盖 dto.id，防越权改他人）
+export function updateUser(data) {
+  return request({
+    url: '/user/update',
+    method: 'put',
+    data
+  })
+}
+
+// 上传头像（multipart），返回 /api/user/avatar/xxx.png
+export function uploadAvatar(file) {
+  const fd = new FormData()
+  fd.append('file', file)
+  return request({
+    url: '/user/upload-avatar',
+    method: 'post',
+    data: fd,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
 // 小区档案列表（用于把 communityId 显示成真实小区名）
 export function getCommunityList() {
   return request({

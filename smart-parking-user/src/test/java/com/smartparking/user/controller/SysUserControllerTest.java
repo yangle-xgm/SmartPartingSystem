@@ -100,4 +100,23 @@ class SysUserControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.accessToken").value("at2"));
     }
+
+    /**
+     * 头像读取的文件名白名单：只允许 UUID 形态 + 图片后缀。
+     * 非图片后缀直接 404，不会被当成路径/脚本读出去。
+     */
+    @Test
+    void avatar_illegalFileName_returns404() throws Exception {
+        mockMvc.perform(get("/api/user/avatar/evil.jsp"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/user/avatar/no-extension"))
+                .andExpect(status().isNotFound());
+    }
+
+    /** 合法形态但文件不存在 → 404，不抛 500 */
+    @Test
+    void avatar_missingFile_returns404() throws Exception {
+        mockMvc.perform(get("/api/user/avatar/00000000-0000-0000-0000-000000000000.png"))
+                .andExpect(status().isNotFound());
+    }
 }
