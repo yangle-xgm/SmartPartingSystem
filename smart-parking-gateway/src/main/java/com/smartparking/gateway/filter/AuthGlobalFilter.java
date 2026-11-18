@@ -62,9 +62,12 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private static final List<String> ADMIN_ONLY_PATTERNS = Arrays.asList(
             "/api/audit/**",
             "/api/user/list",
-            "/api/device/list",
-            "/api/device/*",
-            "/api/device/gate/**",
+            // 设备域整体划给管理端：不只 list / {id}，还要覆盖
+            // POST /api/device（注册设备）、POST /api/device/mock/camera（伪造抓拍入场）、
+            // GET /api/device/status/overview。原写法 /api/device/* 只匹配单段，
+            // 上述无子段与两段路径全部漏网，业主可借此伪造入场刷订单 —— 验收发现 P0。
+            "/api/device",
+            "/api/device/**",
             "/api/stats/income",
             "/api/stats/occupancy",
             "/api/stats/peak",

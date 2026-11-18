@@ -27,18 +27,22 @@ class GatewayAuthWhitelistTest {
             "/v3/api-docs/**",
             "/swagger-resources/**");
 
-    /** 与 AuthGlobalFilter.ADMIN_ONLY_PATTERNS 保持一致 */
-    private static final List<String> ADMIN_ONLY = List.of(
-            "/api/audit/**",
-            "/api/user/list",
-            "/api/user/update",
-            "/api/device/list",
-            "/api/device/*",
-            "/api/device/gate/**",
-            "/api/stats/income",
-            "/api/stats/occupancy",
-            "/api/stats/peak",
-            "/api/stats/export");
+    /**
+     * 直接读 AuthGlobalFilter 的真实常量，避免测试里再抄一份导致漂移
+     * （历史坑：抄写版少了后续补充的模式，测试全绿但线上仍可越权）。
+     */
+    @SuppressWarnings("unchecked")
+    private static List<String> adminOnlyPatterns() {
+        try {
+            var field = AuthGlobalFilter.class.getDeclaredField("ADMIN_ONLY_PATTERNS");
+            field.setAccessible(true);
+            return (List<String>) field.get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("读取 ADMIN_ONLY_PATTERNS 失败", e);
+        }
+    }
+
+    private static final List<String> ADMIN_ONLY = adminOnlyPatterns();
 
     private final AntPathMatcher matcher = new AntPathMatcher();
 
@@ -46,8 +50,16 @@ class GatewayAuthWhitelistTest {
         return WHITE_LIST.stream().anyMatch(p -> matcher.match(p, path));
     }
 
-    private boolean isAdminOnly(String path) {
-        return ADMIN_ONLY.stream().anyMatch(p -> matcher.match(p, path));
+    /** 与 AuthGlobalFilter#isAdminOnly 同语义：支持 "METHOD /path" 限定方法 */
+    private boolean isAdminOnly(String method, String path) {
+        return ADMIN_ONLY.stream().anyMatch(pattern -> {
+            int sp = pattern.indexOf(' ');
+            if (sp > 0) {
+                return method.equalsIgnoreCase(pattern.substring(0, sp))
+                        && matcher.match(pattern.substring(sp + 1), path);
+            }
+            return matcher.match(pattern, path);
+        });
     }
 
     @Test
@@ -68,10 +80,37 @@ class GatewayAuthWhitelistTest {
 
     @Test
     void adminEndpoints_requireRole() {
-        assertTrue(isAdminOnly("/api/audit/list"));
-        assertTrue(isAdminOnly("/api/device/list"));
-        assertTrue(isAdminOnly("/api/stats/income"));
-        assertFalse(isAdminOnly("/api/parking/available"));
+        assertTrue(isAdminOnly("GET", "/api/audit/list"));
+        assertTrue(isAdminOnly("GET", "/api/device/list"));
+        assertTrue(isAdminOnly("GET", "/api/stats/income"));
+        assertFalse(isAdminOnly("GET", "/api/parking/available"));
+    }
+
+    /**
+     * 验收发现 P0 的回归：设备域原先写 `/api/device/*`（单段通配），
+     * 漏了无子段的 POST /api/device 与两段路径 mock/status，业主可伪造抓拍入场。
+     */
+    @Test
+    void deviceDomain_fullyAdminOnly() {
+        assertTrue(isAdminOnly("POST", "/api/device"), "注册设备必须仅管理端");
+        assertTrue(isAdminOnly("GET", "/api/device/1"), "设备详情必须仅管理端");
+        assertTrue(isAdminOnly("POST", "/api/device/mock/camera"), "伪造抓拍必须仅管理端");
+        assertTrue(isAdminOnly("POST", "/api/device/mock/exit-camera"));
+        assertTrue(isAdminOnly("GET", "/api/device/status/overview"));
+        assertTrue(isAdminOnly("POST", "/api/device/gate/open"));
+    }
+
+    /** 收紧必须精准：业主自助开关共享、查看自有车位不能被误伤 */
+    @Test
+    void ownerSelfService_notAdminOnly() {
+        assertFalse(isAdminOnly("PUT", "/api/parking/space/1/share"));
+        assertFalse(isAdminOnly("GET", "/api/parking/space/1"));
+        assertFalse(isAdminOnly("GET", "/api/parking/space/my"));
+        assertFalse(isAdminOnly("POST", "/api/parking/reserve"));
+        // 同一路径的写操作仍归管理端
+        assertTrue(isAdminOnly("PUT", "/api/parking/space/1"));
+        assertTrue(isAdminOnly("DELETE", "/api/parking/space/1"));
+        assertTrue(isAdminOnly("POST", "/api/parking/space"));
     }
 
     @Test
