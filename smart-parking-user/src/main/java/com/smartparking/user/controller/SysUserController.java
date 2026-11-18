@@ -5,6 +5,7 @@ import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
 import com.smartparking.common.core.web.WebRequestUtils;
 import com.smartparking.common.core.exception.ErrorCode;
+import com.smartparking.common.core.exception.BizException;
 import com.smartparking.user.dto.LoginDTO;
 import com.smartparking.user.dto.RegisterDTO;
 import com.smartparking.user.dto.UserUpdateDTO;
@@ -16,12 +17,20 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * 用户控制器
@@ -34,6 +43,12 @@ public class SysUserController {
 
     private final SysUserService sysUserService;
     private final AuditLogService auditLogService;
+
+    /** 允许的头像扩展名 */
+    private static final Set<String> ALLOWED_AVATAR_EXT = Set.of("png", "jpg", "jpeg", "webp");
+    /** 头像文件名白名单：UUID/短横线 + 图片后缀，天然不含路径分隔符 */
+    private static final Pattern AVATAR_FILE_PATTERN =
+            Pattern.compile("^[A-Za-z0-9_-]{1,64}\\.(png|jpg|jpeg|webp)$");
 
     @Operation(summary = "用户注册")
     @PostMapping("/register")
@@ -102,12 +117,52 @@ public class SysUserController {
     @Operation(summary = "上传头像")
     @PostMapping("/upload-avatar")
     public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) throws IOException {
-        String dir = System.getProperty("user.dir") + "/uploads/avatars/";
-        new File(dir).mkdirs();
-        String ext = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf("."));
-        String filename = UUID.randomUUID() + ext;
-        file.transferTo(new File(dir + filename));
-        return Result.success("/uploads/avatars/" + filename);
+        String original = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
+        int dot = original.lastIndexOf('.');
+        String ext = dot >= 0 ? original.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
+        // 只接受图片扩展名：此前不校验，可上传 .jsp/.html 等任意文件到可公开访问目录
+        if (!ALLOWED_AVATAR_EXT.contains(ext)) {
+            throw new BizException(ErrorCode.DATA_INVALID, "头像仅支持 JPG / PNG / WEBP 图片");
+        }
+        File dir = avatarDir();
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new BizException(ErrorCode.DATA_INVALID, "头像目录创建失败");
+        }
+        String filename = UUID.randomUUID() + "." + ext;
+        file.transferTo(new File(dir, filename));
+        // 返回网关可路由、且 <img> 能直接引用（免 Authorization 头）的地址
+        return Result.success("/api/user/avatar/" + filename);
+    }
+
+    /**
+     * 头像文件读取。
+     *
+     * <p>此前上传后返回 {@code /uploads/avatars/xxx.png}，但网关没有该前缀的路由、
+     * 服务也没有静态资源映射 —— 业主与管理端上传成功却全是裂图。现由本接口按文件名
+     * 回读，路径经白名单正则校验（只允许 UUID 形态 + 图片后缀），不含分隔符，
+     * 从根上排除目录穿越。该路径在网关 WHITE_LIST 内（浏览器 img 标签不携带 JWT）。</p>
+     */
+    @Operation(summary = "头像文件（公开读取，供 img 标签直接引用）")
+    @GetMapping("/avatar/{filename}")
+    public ResponseEntity<byte[]> avatar(@PathVariable String filename) throws IOException {
+        if (!AVATAR_FILE_PATTERN.matcher(filename).matches()) {
+            return ResponseEntity.notFound().build();
+        }
+        File file = new File(avatarDir(), filename);
+        if (!file.isFile()) {
+            return ResponseEntity.notFound().build();
+        }
+        String ext = filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
+        MediaType type = "png".equals(ext) ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG;
+        return ResponseEntity.ok()
+                .contentType(type)
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic())
+                .body(Files.readAllBytes(file.toPath()));
+    }
+
+    /** 头像目录：与写入保持一致，均以进程工作目录为基准 */
+    private File avatarDir() {
+        return new File(System.getProperty("user.dir") + "/uploads/avatars/");
     }
 
     @Operation(summary = "退出登录")

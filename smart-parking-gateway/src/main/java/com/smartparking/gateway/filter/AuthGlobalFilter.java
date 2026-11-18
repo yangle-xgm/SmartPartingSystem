@@ -45,6 +45,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/user/register",
             "/api/user/refresh",
             "/api/user/captcha",
+            // 头像图片：浏览器 <img> 不会携带 Authorization 头，若要求鉴权则头像恒为裂图。
+            // 文件名是 UUID + 图片后缀（服务端另有正则白名单），不含业务敏感信息。
+            "/api/user/avatar/**",
             // 注意：原 /api/**/internal/** 白名单已移除（E2E 报告 P0-1：业主可经网关直接调内部接口退款/伪造支付）。
             // /internal/** 现要求 X-Internal-Token 校验，见 filter() 内部分支。
             "/doc.html",
