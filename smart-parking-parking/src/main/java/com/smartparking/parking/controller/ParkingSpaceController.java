@@ -131,24 +131,48 @@ public class ParkingSpaceController {
     @PostMapping("/reserve")
     public Result<Void> reserve(
             @Parameter(description = "车位ID") @RequestParam Long spaceId,
-            @Parameter(description = "用户ID") @RequestParam Long userId,
+            @Parameter(description = "用户ID（业主端忽略此值，以网关注入的身份为准）") @RequestParam(required = false) Long userId,
             @Parameter(description = "开始时间") @RequestParam(required = false) String startTime,
-            @Parameter(description = "结束时间") @RequestParam(required = false) String endTime) {
-        parkingSpaceService.reserveSpace(spaceId, userId, startTime, endTime);
+            @Parameter(description = "结束时间") @RequestParam(required = false) String endTime,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 越权修复：业主(role=0)只能给自己预约，忽略前端传入的 userId
+        Long effectiveUserId = userId;
+        if ("0".equals(currentRole) || (currentRole == null && currentUserId != null)) {
+            Long self = parseLong(currentUserId);
+            if (self != null) effectiveUserId = self;
+        }
+        if (effectiveUserId == null) {
+            return Result.fail(ErrorCode.PARAM_INVALID, "缺少预约人信息");
+        }
+        parkingSpaceService.reserveSpace(spaceId, effectiveUserId, startTime, endTime);
         return Result.success();
     }
 
     @Operation(summary = "取消预约")
     @PostMapping("/reserve/cancel")
-    public Result<Void> cancelReserve(@RequestParam Long reservationId, @RequestParam Long userId) {
-        parkingSpaceService.cancelReservation(reservationId, userId);
+    public Result<Void> cancelReserve(@RequestParam Long reservationId,
+            @RequestParam(required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        Long effectiveUserId = "0".equals(currentRole) ? parseLong(currentUserId) : userId;
+        if (effectiveUserId == null) {
+            return Result.fail(ErrorCode.PARAM_INVALID, "缺少用户信息");
+        }
+        parkingSpaceService.cancelReservation(reservationId, effectiveUserId);
         return Result.success();
     }
 
     @Operation(summary = "我的预约列表")
     @GetMapping("/reserve/my")
-    public Result<Object> myReservations(@RequestParam Long userId) {
-        return Result.success(parkingSpaceService.myReservations(userId));
+    public Result<Object> myReservations(@RequestParam(required = false) Long userId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        Long effectiveUserId = "0".equals(currentRole) ? parseLong(currentUserId) : userId;
+        if (effectiveUserId == null) {
+            return Result.fail(ErrorCode.PARAM_INVALID, "缺少用户信息");
+        }
+        return Result.success(parkingSpaceService.myReservations(effectiveUserId));
     }
 
     // ==================== 内部接口（供其他服务调用） ====================
@@ -168,9 +192,33 @@ public class ParkingSpaceController {
 
     @Operation(summary = "业主切换车位共享状态")
     @PutMapping("/space/{id}/share")
-    public Result<Void> toggleShare(@PathVariable Long id, @RequestParam Integer isShared) {
-        parkingSpaceService.toggleShare(id, isShared);
+    public Result<Void> toggleShare(@PathVariable Long id,
+            @RequestParam Integer isShared,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        Long userId = parseLong(currentUserId);
+        parkingSpaceService.toggleShare(id, isShared, userId, currentRole);
         return Result.success();
+    }
+
+    @Operation(summary = "我的车位（业主端，按产权人查询固定车位）")
+    @GetMapping("/space/my")
+    public Result<List<ParkingSpace>> mySpaces(
+            @Parameter(description = "业主ID") @RequestParam(required = false) Long ownerId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 业主只能看自己的车位；物业/超管可按 ownerId 代查
+        Long target = "0".equals(currentRole) ? parseLong(currentUserId) : (ownerId != null ? ownerId : parseLong(currentUserId));
+        return Result.success(parkingSpaceService.listMySpaces(target));
+    }
+
+    private Long parseLong(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Long.valueOf(value.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @Operation(summary = "车位占用汇总（内部接口，统计服务回填占用率使用）")

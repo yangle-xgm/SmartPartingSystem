@@ -23,8 +23,13 @@ public interface ParkingSpaceMapper extends BaseMapper<ParkingSpace> {
     /**
      * 原子地把空闲车位置为已预约（防并发超卖）。
      * 只有 status=0(空闲) 时才更新成功，返回影响行数。
+     *
+     * <p>注意：owner_id 是车位产权人，只由固定车位归属决定，<b>不可被预约改写</b>。
+     * 历史实现曾把预约人写入 owner_id，导致业主车位被他人预约后产权转移、
+     * 取消预约后产权被清空，进而让共享分润（share_income.owner_id）失去依据。
+     * 预约占用语义由 reservation 表 + status=2 表达，与产权完全解耦。</p>
      */
-    @Update("UPDATE parking_space SET status=2, owner_id=#{userId}, update_time=NOW() " +
+    @Update("UPDATE parking_space SET status=2, update_time=NOW() " +
             "WHERE id=#{id} AND status=0 AND is_deleted=0")
     int lockToReserved(@Param("id") Long id, @Param("userId") Long userId);
 

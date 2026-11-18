@@ -72,8 +72,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             // E2E 报告 P0-2/P0-3：以下管理端接口此前业主可直接调用
             "/api/notify/admin/**",            // 群发通知（原业主可调，越权）
             "POST /api/parking/space",         // 新增车位
-            "PUT /api/parking/space/**",       // 修改车位（含 share 分享配置）
-            "DELETE /api/parking/space/**",    // 删除车位
+            // 业主需要自助开关「车位共享」，故只拦到 /space/{id} 这一层（单段通配），
+            // 放行 /space/{id}/share；越权由车位服务按 ownerId 归属校验兜底。
+            "PUT /api/parking/space/*",        // 修改车位信息
+            "DELETE /api/parking/space/*",     // 删除车位
             "GET /api/notify/feedback/all",    // 读全量反馈
             "POST /api/notify/feedback/*/reply" // 回复反馈
             // 注意：/api/user/update 不在管理端白名单内 —— 业主也需要修改本人资料，
