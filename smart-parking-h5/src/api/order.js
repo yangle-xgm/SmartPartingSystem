@@ -9,6 +9,22 @@ export function getOrderList(params) {
   })
 }
 
+// 订单详情（后端按 role=0 校验只能看本人车辆订单）
+export function getOrderDetail(orderNo) {
+  return request({
+    url: `/order/${orderNo}`,
+    method: 'get'
+  })
+}
+
+// 计费规则列表（用于订单详情展示计费口径）
+export function getBillingRules() {
+  return request({
+    url: '/order/billing-rules',
+    method: 'get'
+  })
+}
+
 // 取消订单
 export function cancelOrder(orderNo) {
   return request({

@@ -37,7 +37,12 @@
           <div v-for="n in 3" :key="`sk-${n}`" class="h-sk h-sk--card" />
         </template>
         <template v-else-if="filtered.length">
-          <div v-for="o in filtered" :key="o.orderNo" class="h-card h-card--tap order">
+          <div
+            v-for="o in filtered"
+            :key="o.orderNo"
+            class="h-card h-card--tap order"
+            @click="openDetail(o)"
+          >
             <div class="order__head">
               <span class="h-plate" :data-color="o.plateColor || '蓝'">
                 {{ displayPlate(o) }}
@@ -73,14 +78,14 @@
                   v-if="o.status === 0"
                   class="minibtn"
                   type="button"
-                  @click="handleCancel(o)"
+                  @click.stop="handleCancel(o)"
                 >取消订单</button>
                 <span v-else-if="isFree(o)" class="paid">无需支付</span>
                 <button
                   v-else-if="o.status === 1 && o.payStatus === 0"
                   class="minibtn minibtn--primary"
                   type="button"
-                  @click="handlePay(o)"
+                  @click.stop="handlePay(o)"
                 >去支付</button>
                 <span v-if="o.status === 1 && o.payStatus === 1" class="paid">已支付</span>
               </div>
@@ -112,6 +117,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showToast, showSuccessToast } from 'vant'
 import { getOrderList, cancelOrder, createPayment, wechatPay, alipayPay } from '@/api/order'
@@ -120,6 +126,13 @@ import { displayPlate } from '@/utils/plate'
 import TabBar from '@/components/TabBar.vue'
 
 const userId = getUserId()
+const router = useRouter()
+
+/** 进详情页看计费明细与出场时间 */
+function openDetail(o) {
+  if (!o?.orderNo) return
+  router.push(`/orders/${o.orderNo}`)
+}
 
 const tabs = [
   { title: '全部' },

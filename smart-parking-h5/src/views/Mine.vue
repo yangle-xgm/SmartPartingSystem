@@ -2,7 +2,10 @@
   <div class="h-page">
     <header class="h-hero">
       <div class="profile">
-        <div class="profile__avatar">{{ avatarText }}</div>
+        <div class="profile__avatar" @click="router.push('/profile-edit')">
+          <img v-if="userInfo.avatar" :src="userInfo.avatar" alt="头像" />
+          <template v-else>{{ avatarText }}</template>
+        </div>
         <div class="profile__info">
           <template v-if="loading">
             <span class="h-sk h-sk--line sk-name" />
@@ -101,6 +104,21 @@
           <div class="links__item" @click="router.push('/reserve')">
             <span class="links__icon"><van-icon name="clock-o" /></span>
             <span class="links__text">车位预约</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
+          <div class="links__item" @click="router.push('/payments')">
+            <span class="links__icon" data-tone="gold"><van-icon name="balance-list-o" /></span>
+            <span class="links__text">支付记录</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
+          <div class="links__item" @click="router.push('/feedback')">
+            <span class="links__icon" data-tone="danger"><van-icon name="comment-o" /></span>
+            <span class="links__text">意见反馈</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
+          <div class="links__item" @click="router.push('/profile-edit')">
+            <span class="links__icon"><van-icon name="contact" /></span>
+            <span class="links__text">编辑资料</span>
             <van-icon name="arrow" class="links__arrow" />
           </div>
         </div>
@@ -214,9 +232,11 @@ async function handleLogout() {
 .profile__avatar {
   width: 56px;
   height: 56px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   font-size: 22px;
   font-weight: 700;
   color: #2A2214;
@@ -224,6 +244,8 @@ async function handleLogout() {
   border-radius: 50%;
   box-shadow: 0 8px 20px rgba(240, 201, 135, 0.28);
 }
+.profile__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile__avatar:active { transform: scale(0.96); }
 .profile__info { flex: 1; min-width: 0; }
 .profile__name {
   display: block;

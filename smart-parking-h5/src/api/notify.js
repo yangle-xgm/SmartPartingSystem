@@ -34,3 +34,26 @@ export function getUnreadCount(userId) {
     params: { userId }
   })
 }
+
+/**
+ * 提交意见反馈。
+ * 后端以网关注入的 X-User-Id 为准（role=0 时忽略 body 的 userId），
+ * 这里带上 userId 只是为了直连服务调试时可用。
+ * @param {{userId:number,type:number,title?:string,content:string}} data
+ */
+export function submitFeedback(data) {
+  return request({
+    url: '/notify/feedback',
+    method: 'post',
+    data
+  })
+}
+
+// 我的反馈列表（含物业回复）
+export function getMyFeedback(params) {
+  return request({
+    url: '/notify/feedback/my',
+    method: 'get',
+    params
+  })
+}
