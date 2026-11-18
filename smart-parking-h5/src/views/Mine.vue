@@ -88,6 +88,21 @@
             <span v-if="unread" class="links__badge">{{ unread > 99 ? '99+' : unread }}</span>
             <van-icon name="arrow" class="links__arrow" />
           </div>
+          <div class="links__item" @click="router.push('/monthly')">
+            <span class="links__icon" data-tone="gold"><van-icon name="balance-o" /></span>
+            <span class="links__text">月卡充值</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
+          <div class="links__item" @click="router.push('/spaces')">
+            <span class="links__icon" data-tone="teal"><van-icon name="wap-home-o" /></span>
+            <span class="links__text">我的车位</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
+          <div class="links__item" @click="router.push('/reserve')">
+            <span class="links__icon"><van-icon name="clock-o" /></span>
+            <span class="links__text">车位预约</span>
+            <van-icon name="arrow" class="links__arrow" />
+          </div>
         </div>
       </div>
 

@@ -30,3 +30,43 @@ export function unbindVehicle(id, userId) {
     params: { userId }
   })
 }
+
+// ==================== 月卡充值 ====================
+
+/**
+ * 月卡试算：选月数实时报价。
+ * 返回 { unitPrice, amount, expireBefore, expireAfter, isRenewal, plateNo, plateNoMasked }
+ */
+export function quoteMonthly(vehicleId, months) {
+  return request({
+    url: '/vehicle/monthly/quote',
+    method: 'get',
+    params: { vehicleId, months }
+  })
+}
+
+// 创建月卡订单（待支付），返回 { orderNo, amount, months, expireAfter, ... }
+export function createMonthlyOrder(vehicleId, months, payType = 1) {
+  return request({
+    url: '/vehicle/monthly/create',
+    method: 'post',
+    params: { vehicleId, months, payType }
+  })
+}
+
+// 模拟支付：成功后月卡立即生效
+export function payMonthly(orderNo) {
+  return request({
+    url: '/vehicle/monthly/pay',
+    method: 'post',
+    params: { orderNo }
+  })
+}
+
+// 我的月卡订单
+export function getMonthlyOrders() {
+  return request({
+    url: '/vehicle/monthly/orders',
+    method: 'get'
+  })
+}

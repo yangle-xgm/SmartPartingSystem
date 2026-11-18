@@ -82,6 +82,25 @@
           </div>
         </div>
 
+        <!-- 车主服务：月卡、车位、预约 -->
+        <div class="h-section">
+          <span class="h-section__title">车主服务</span>
+        </div>
+        <div class="h-grid entry3">
+          <div class="h-grid__item" @click="router.push('/monthly')">
+            <span class="h-grid__icon" data-tone="gold"><van-icon name="balance-o" /></span>
+            <span class="h-grid__text">月卡充值</span>
+          </div>
+          <div class="h-grid__item" @click="router.push('/spaces')">
+            <span class="h-grid__icon" data-tone="teal"><van-icon name="wap-home-o" /></span>
+            <span class="h-grid__text">我的车位</span>
+          </div>
+          <div class="h-grid__item" @click="router.push('/reserve')">
+            <span class="h-grid__icon"><van-icon name="clock-o" /></span>
+            <span class="h-grid__text">车位预约</span>
+          </div>
+        </div>
+
         <!-- 进行中订单 -->
         <div class="h-section">
           <span class="h-section__title">进行中的停车</span>
@@ -296,6 +315,11 @@ async function loadData() {
 .notice__arrow { opacity: 0.6; }
 
 .entry { margin-top: var(--sp-gap-card); }
+/* 车主服务三宫格：与上方四宫格同款式，只是列数改成 3 */
+.entry3 {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: var(--sp-2);
+}
 
 .run {
   display: flex;
