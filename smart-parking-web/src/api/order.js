@@ -15,21 +15,6 @@ export function getOrderDetail(orderNo) {
   })
 }
 
-export function cancelOrder(orderNo) {
-  return request({
-    url: `/order/cancel/${orderNo}`,
-    method: 'post'
-  })
-}
-
-export function calculateAmount(orderNo) {
-  return request({
-    url: '/order/calculate',
-    method: 'get',
-    params: { orderNo }
-  })
-}
-
 // 计费规则（只读）：出场结算时按车辆类型/车牌颜色匹配的那套规则
 // silent：规则表属于辅助信息，接口不可用时页面显示空态即可，不弹全局错误提示
 export function getBillingRules() {
@@ -37,15 +22,6 @@ export function getBillingRules() {
     url: '/order/billing-rules',
     method: 'get',
     silent: true
-  })
-}
-
-// 车辆入场，创建订单
-export function createEntryOrder(data) {
-  return request({
-    url: '/order/entry',
-    method: 'post',
-    params: data
   })
 }
 

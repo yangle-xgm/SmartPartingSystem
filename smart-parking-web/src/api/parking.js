@@ -54,13 +54,6 @@ export function getAllSpaces(area) {
   })
 }
 
-export function getSpaceStatistics() {
-  return request({
-    url: '/parking/status/statistics',
-    method: 'get'
-  })
-}
-
 // 预约车位（业主端）
 export function reserveSpace(spaceId, userId, startTime, endTime) {
   return request({
