@@ -52,9 +52,17 @@ public interface ParkingSpaceService extends IService<ParkingSpace> {
     boolean claimSpace(Long spaceId);
 
     /**
-     * 切换车位共享状态
+     * 切换车位共享状态。
+     *
+     * @param currentUserId 当前登录用户（role=0 时必须与车位产权人一致，否则判越权）
+     * @param currentRole   当前角色（null/1/2 视为物业或超管，允许代业主操作）
      */
-    void toggleShare(Long spaceId, Integer isShared);
+    void toggleShare(Long spaceId, Integer isShared, Long currentUserId, String currentRole);
+
+    /**
+     * 查询某业主名下的固定车位（含共享状态与月租价），业主端「我的车位」使用
+     */
+    java.util.List<ParkingSpace> listMySpaces(Long ownerId);
 
     /**
      * 车位占用汇总（内部接口用，communityId 非空时按小区统计）：

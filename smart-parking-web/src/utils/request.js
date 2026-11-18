@@ -56,6 +56,12 @@ const INTERNAL_MSG = /###|SQLState|SQL\b|MyBatis|java\.|Exception|Out of range|D
 const FIXED_MESSAGE_CODES = new Set([401, 403, 429])
 
 /**
+ * 真正的「服务端故障」状态码（区别于业务错误码 5xxx）。
+ * 用白名单而不是 `code >= 500`：5201/5402 这类业务码同样满足 >= 500。
+ */
+const SERVER_ERROR_CODES = new Set([500, 502, 503, 504])
+
+/**
  * 提示文案优先级（D5）：
  *  1. 401/403/429 → 固定文案（状态语义稳定，且不暴露细节）
  *  2. 后端 message 干净（无 SQL/堆栈、长度合理）→ 直接用后端文案
@@ -65,10 +71,18 @@ const FIXED_MESSAGE_CODES = new Set([401, 403, 429])
  */
 function safeMessage(code, backendMsg) {
   if (FIXED_MESSAGE_CODES.has(code)) return CODE_MESSAGE[code]
+  // DEF-01：服务端故障一律用固定文案，不信任后端 message。
+  // 「Internal Server Error」「Bad Gateway」这类框架短句既不命中 INTERNAL_MSG、
+  // 也不超长，历史上被当成"干净业务文案"直接弹给用户，比空白更糟。
+  // 必须按白名单判断而不是 code>=500：业务错误码 5xxx（5201/5402…）也 >= 500。
+  if (SERVER_ERROR_CODES.has(code)) {
+    if (backendMsg) console.error('[api] server error:', backendMsg)
+    return SERVER_BUSY
+  }
   const clean = !!backendMsg && !INTERNAL_MSG.test(backendMsg) && backendMsg.length <= 80
   if (clean) return backendMsg
   if (CODE_MESSAGE[code]) return CODE_MESSAGE[code]
-  return code >= 500 ? SERVER_BUSY : '操作失败，请稍后重试'
+  return '操作失败，请稍后重试'
 }
 
 // 401 提示节流：并发续期失败时只弹一次

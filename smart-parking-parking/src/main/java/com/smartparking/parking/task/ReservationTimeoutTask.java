@@ -30,8 +30,7 @@ public class ReservationTimeoutTask {
         parkingSpaceService.update(new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ParkingSpace>()
                 .eq(ParkingSpace::getStatus, Constants.SPACE_STATUS_RESERVED)
                 .lt(ParkingSpace::getUpdateTime, threshold)
-                .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE)
-                .set(ParkingSpace::getOwnerId, null));
+                .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE));
         if (updated > 0) {
             log.info("预约超时释放：{} 个车位已恢复空闲", updated);
         }

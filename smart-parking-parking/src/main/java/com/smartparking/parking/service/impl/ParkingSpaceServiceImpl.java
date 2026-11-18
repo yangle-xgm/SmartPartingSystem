@@ -211,9 +211,9 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
             throw new BizException(ErrorCode.SPACE_UNAVAILABLE);
         }
 
-        // 同步内存对象，供后续 Redis 更新使用
+        // 同步内存对象，供后续 Redis 更新使用。
+        // 只改状态，不动 owner_id：预约是使用权，产权不因他人预约而转移。
         space.setStatus(Constants.SPACE_STATUS_RESERVED);
-        space.setOwnerId(userId);
         // 更新Redis缓存
         updateRedisSpaceStatus(space);
 
@@ -275,11 +275,34 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
     }
 
     @Override
-    public void toggleShare(Long spaceId, Integer isShared) {
+    public void toggleShare(Long spaceId, Integer isShared, Long currentUserId, String currentRole) {
         ParkingSpace space = this.getById(spaceId);
         if (space == null) throw new BizException(ErrorCode.SPACE_NOT_FOUND);
+
+        // 越权拦截：业主只能切换自己名下固定车位的共享状态，物业/超管可代操作。
+        // 历史实现无任何归属校验，任何登录用户都能改任意车位的共享开关（进而影响他人分润）。
+        boolean isAdmin = currentRole == null || "1".equals(currentRole) || "2".equals(currentRole);
+        if (!isAdmin) {
+            if (space.getOwnerId() == null || !space.getOwnerId().equals(currentUserId)) {
+                throw new BizException(ErrorCode.FORBIDDEN, "只能操作自己名下的车位");
+            }
+        }
+        if (isShared == null || (isShared != 0 && isShared != 1)) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "共享状态只能为 0 或 1");
+        }
         space.setIsShared(isShared);
         this.updateById(space);
+    }
+
+    @Override
+    public List<ParkingSpace> listMySpaces(Long ownerId) {
+        if (ownerId == null) {
+            return java.util.Collections.emptyList();
+        }
+        return this.list(new LambdaQueryWrapper<ParkingSpace>()
+                .eq(ParkingSpace::getOwnerId, ownerId)
+                .orderByAsc(ParkingSpace::getArea)
+                .orderByAsc(ParkingSpace::getSpaceNo));
     }
 
     @Override
@@ -291,17 +314,15 @@ public class ParkingSpaceServiceImpl extends ServiceImpl<ParkingSpaceMapper, Par
         if (r.getStatus() != 0) {
             throw new BizException(ErrorCode.RESERVATION_ALREADY_FINISHED);
         }
-        // 释放车位
+        // 释放车位：只回退状态，owner_id 是产权字段不受预约影响
         this.update(new LambdaUpdateWrapper<ParkingSpace>()
                 .eq(ParkingSpace::getId, r.getSpaceId())
                 .eq(ParkingSpace::getStatus, Constants.SPACE_STATUS_RESERVED)
-                .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE)
-                .set(ParkingSpace::getOwnerId, null));
+                .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE));
         // 更新Redis
         ParkingSpace s = this.getById(r.getSpaceId());
         if (s != null) {
             s.setStatus(Constants.SPACE_STATUS_FREE);
-            s.setOwnerId(null);
             updateRedisSpaceStatus(s);
         }
         // 更新预约状态

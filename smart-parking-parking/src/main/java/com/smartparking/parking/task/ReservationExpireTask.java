@@ -35,12 +35,11 @@ public class ReservationExpireTask {
                         .eq(Reservation::getStatus, 0)
                         .lt(Reservation::getEndTime, threshold));
         for (Reservation r : expired) {
-            // 释放车位
+            // 释放车位：只回退状态，owner_id（产权）不因预约到期而清空
             parkingSpaceService.update(new LambdaUpdateWrapper<ParkingSpace>()
                     .eq(ParkingSpace::getId, r.getSpaceId())
                     .eq(ParkingSpace::getStatus, Constants.SPACE_STATUS_RESERVED)
-                    .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE)
-                    .set(ParkingSpace::getOwnerId, null));
+                    .set(ParkingSpace::getStatus, Constants.SPACE_STATUS_FREE));
             // 更新预约状态
             r.setStatus(2);
             reservationMapper.updateById(r);

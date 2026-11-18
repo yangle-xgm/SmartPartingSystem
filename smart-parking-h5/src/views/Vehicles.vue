@@ -63,6 +63,9 @@
 
             <div class="car__actions">
               <button class="minibtn" type="button" @click="showDetail(v)">详情</button>
+              <button class="minibtn minibtn--gold" type="button" @click="goMonthly(v)">
+                {{ v.monthlyExpire ? '续费' : '开月卡' }}
+              </button>
               <button class="minibtn minibtn--danger" type="button" @click="handleUnbind(v)">解绑</button>
             </div>
           </div>
@@ -123,12 +126,14 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showToast, showSuccessToast, showConfirmDialog } from 'vant'
 import { getVehicleList, bindVehicle, unbindVehicle } from '@/api/vehicle'
 import { getUserId } from '@/api/user'
 import TabBar from '@/components/TabBar.vue'
 
+const router = useRouter()
 const userId = getUserId()
 
 const vehicles = ref([])
@@ -181,6 +186,11 @@ function openBind() {
 function showDetail(v) {
   current.value = v
   detailVisible.value = true
+}
+
+/** 带车辆 ID 跳到月卡充值页，免去用户再选一次车 */
+function goMonthly(v) {
+  router.push({ path: '/monthly', query: { vehicleId: v.id } })
 }
 
 const handleBind = async () => {
@@ -272,6 +282,7 @@ const handleUnbind = async (v) => {
 }
 .minibtn:active { opacity: 0.75; }
 .minibtn--danger { color: var(--sp-danger); background: var(--sp-danger-soft); }
+.minibtn--gold { color: var(--sp-gold); background: var(--sp-gold-soft); }
 
 .sheet__title { font-size: 16px; font-weight: 700; }
 .sheet__desc {

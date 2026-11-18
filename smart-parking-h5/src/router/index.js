@@ -44,6 +44,24 @@ const routes = [
     component: () => import('@/views/Notify.vue'),
     meta: { title: '通知中心' }
   },
+  {
+    path: '/monthly',
+    name: 'Monthly',
+    component: () => import('@/views/Monthly.vue'),
+    meta: { title: '月卡充值' }
+  },
+  {
+    path: '/spaces',
+    name: 'Spaces',
+    component: () => import('@/views/Spaces.vue'),
+    meta: { title: '我的车位' }
+  },
+  {
+    path: '/reserve',
+    name: 'Reserve',
+    component: () => import('@/views/Reserve.vue'),
+    meta: { title: '车位预约' }
+  },
   // 未知地址回首页，避免整页空白
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ]

@@ -38,6 +38,12 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     private final UserAuthMetrics userAuthMetrics;
 
+    /**
+     * 默认小区ID：与 {@code sys_user.community_id} 的 DB DEFAULT 1 保持一致。
+     * 注册时显式写入，保证注册响应里的 VO 也带得出 communityId（否则 DB 有值、VO 为 null）。
+     */
+    private static final Long DEFAULT_COMMUNITY_ID = 1L;
+
     @Override
     public UserVO register(RegisterDTO dto) {
         // 检查用户名是否已存在
@@ -59,6 +65,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         // 默认角色为业主
         user.setRole(0);
         user.setStatus(1);
+        // 归属默认小区（与 DB DEFAULT 1 一致），保证注册响应可回填 communityId
+        user.setCommunityId(DEFAULT_COMMUNITY_ID);
 
         this.save(user);
         userAuthMetrics.onRegister();
@@ -97,7 +105,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                     "{\"username\":\"" + username + "\"}", true, WebRequestUtils.currentIp(), WebRequestUtils.elapsedMillis());
             Map<String, String> tokens = new HashMap<>();
             userAuthMetrics.onLoginSuccess();
-            Long communityId = user.getCommunityId() != null ? user.getCommunityId() : 1L;
+            Long communityId = user.getCommunityId() != null ? user.getCommunityId() : DEFAULT_COMMUNITY_ID;
             tokens.put("accessToken", JwtUtils.generateToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             tokens.put("refreshToken", JwtUtils.generateRefreshToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             return tokens;
@@ -121,7 +129,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 throw new BizException(ErrorCode.LOGIN_FAILED, "用户不存在或已禁用");
             }
             Map<String, String> tokens = new HashMap<>();
-            Long communityId = user.getCommunityId() != null ? user.getCommunityId() : 1L;
+            Long communityId = user.getCommunityId() != null ? user.getCommunityId() : DEFAULT_COMMUNITY_ID;
             tokens.put("accessToken", JwtUtils.generateToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             tokens.put("refreshToken", JwtUtils.generateRefreshToken(user.getId(), user.getUsername(), user.getRole(), communityId));
             return tokens;

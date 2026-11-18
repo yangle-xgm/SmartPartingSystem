@@ -102,6 +102,29 @@ a, button, [role='button'], .h-grid__item, .h-section__more,
   border-radius: var(--sp-radius-pill);
 }
 
+/* 非 Tab 页（如通知中心）的返回按钮：与 action 同色系，圆形只放图标 */
+.h-hero__back {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  color: var(--sp-hero-text);
+  background: var(--sp-hero-fill);
+  border: 1px solid var(--sp-hero-line);
+  border-radius: 50%;
+  transition: transform var(--sp-dur-micro) var(--sp-ease);
+}
+.h-hero__back:active { transform: scale(0.92); }
+
+/* hero 标题块：夹在返回按钮与右侧操作之间，允许收缩避免长标题撑破 */
+.h-hero__lead {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Hero 内的三宫格指标 */
 .h-hero__stats {
   position: relative;
