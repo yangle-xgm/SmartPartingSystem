@@ -149,21 +149,37 @@ test.describe('H5 · 月卡充值', () => {
 
 test.describe('H5 · 我的车位与共享', () => {
   test('车位卡片、共享状态与累计收益', async ({ page, request }) => {
-    await authAs(page, request);
-    await page.goto('/spaces');
+    const token = await authAs(page, request);
 
-    await expect(page.locator('.h-hero__title')).toHaveText('我的车位');
-    const cards = page.locator('.h-card.space');
-    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+    // 夹具：本用例断言的是「共享中」的展示，先确保 A-001 处于共享态，
+    // 结束后还原，避免依赖演示库的偶然状态（曾因他人清理数据导致误红）。
+    const SPACE_ID = 1;
+    await request.put(`/api/parking/space/${SPACE_ID}/share`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { isShared: 1 },
+    });
 
-    // 张三名下有 A-001，且处于共享中
-    await expect(cards.first()).toContainText('A-001');
-    await expect(cards.first()).toContainText('共享收益');
-    await expect(cards.first().locator('.van-switch')).toHaveClass(/van-switch--on/);
+    try {
+      await page.goto('/spaces');
 
-    // 累计收益卡片与明细行
-    await expect(page.locator('.income__sum b')).toBeVisible();
-    await expect(page.locator('.rec').first()).toContainText('共享分润');
+      await expect(page.locator('.h-hero__title')).toHaveText('我的车位');
+      const cards = page.locator('.h-card.space');
+      await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+
+      // 张三名下有 A-001，且处于共享中
+      await expect(cards.first()).toContainText('A-001');
+      await expect(cards.first()).toContainText('共享收益');
+      await expect(cards.first().locator('.van-switch')).toHaveClass(/van-switch--on/);
+
+      // 累计收益卡片与明细行
+      await expect(page.locator('.income__sum b')).toBeVisible();
+      await expect(page.locator('.rec').first()).toContainText('共享分润');
+    } finally {
+      await request.put(`/api/parking/space/${SPACE_ID}/share`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { isShared: 0 },
+      });
+    }
   });
 
   test('切换共享开关生效并可还原', async ({ page, request }) => {
