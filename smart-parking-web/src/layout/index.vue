@@ -129,7 +129,9 @@ const MENU = [
       { path: '/vehicle', title: '车辆管理', icon: 'Van', roles: [0, 1, 2] },
       { path: '/my-orders', title: '我的订单', icon: 'Tickets', roles: [0] },
       { path: '/order', title: '订单管理', icon: 'Document', roles: [1, 2] },
+      { path: '/billing', title: '计费规则', icon: 'SetUp', roles: [1, 2] },
       { path: '/payment', title: '缴费管理', icon: 'Money', roles: [0, 1, 2] },
+      { path: '/invoice', title: '电子发票', icon: 'Tickets', roles: [1, 2] },
       { path: '/invite', title: '访客邀请', icon: 'Promotion', roles: [0] }
     ]
   },

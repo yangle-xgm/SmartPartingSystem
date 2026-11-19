@@ -102,10 +102,22 @@ const routes = [
         meta: { title: '订单管理', icon: 'Document', roles: [1, 2] }
       },
       {
+        path: 'billing',
+        name: 'Billing',
+        component: () => import('@/views/billing/index.vue'),
+        meta: { title: '计费规则', icon: 'SetUp', roles: [1, 2] }
+      },
+      {
         path: 'payment',
         name: 'Payment',
         component: () => import('@/views/payment/index.vue'),
         meta: { title: '缴费管理', icon: 'Money' }
+      },
+      {
+        path: 'invoice',
+        name: 'Invoice',
+        component: () => import('@/views/invoice/index.vue'),
+        meta: { title: '电子发票', icon: 'Tickets', roles: [1, 2] }
       },
       {
         path: 'device',
