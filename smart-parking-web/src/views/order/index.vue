@@ -211,6 +211,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import { getOrderList, getOrderDetail, exitOrder } from '@/api/order'
 import { createPayment, wechatPay, alipayPay } from '@/api/payment'
+import { isAlipaySandboxReady, payWithAlipaySandbox } from '@/utils/alipaySandbox'
 import { getDashboardData } from '@/api/statistics'
 import { getUserId } from '@/api/user'
 import { displayPlate } from '@/utils/plate'
@@ -242,14 +243,9 @@ const pagination = reactive({ current: 1, size: 10, total: 0 })
 const money = (v) => (v === null || v === undefined || v === '' ? '0.00' : Number(v).toFixed(2))
 const shortTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '—')
 
-// 车牌/订单号搜索在前端做（后端 ParkingOrderQuery 未提供关键字字段）
-const filteredData = computed(() => {
-  const k = keyword.value.trim().toUpperCase()
-  if (!k) return tableData.value
-  return tableData.value.filter(r =>
-    String(r.orderNo || '').toUpperCase().includes(k) || String(r.plateNo || '').toUpperCase().includes(k)
-  )
-})
+// 关键字检索由后端完成（订单号/车位号/完整车牌），前端不再二次过滤，
+// 否则跨页命中的记录会被"当前页过滤"误删（报告 P2-12）
+const filteredData = computed(() => tableData.value)
 
 onMounted(() => {
   loadData()
@@ -270,6 +266,7 @@ const loadData = async () => {
   try {
     const params = { current: pagination.current, size: pagination.size }
     if (searchForm.status !== '') params.status = searchForm.status
+    if (keyword.value.trim()) params.keyword = keyword.value.trim()
     const res = await getOrderList(params)
     tableData.value = res.data?.records || []
     pagination.total = res.data?.total || 0
@@ -338,6 +335,17 @@ const handleConfirmPay = async () => {
     })
     const payNo = createRes.data?.payNo
     if (!payNo) throw new Error('支付流水创建失败')
+    // 支付宝沙箱：跳转收银台 + 轮询确认到账；未配置时回落到模拟通道
+    if (payType.value === 2 && (await isAlipaySandboxReady())) {
+      const result = await payWithAlipaySandbox(payNo)
+      if (!result.ok) throw new Error(result.message || '支付未完成')
+      ElMessage.success('支付宝支付成功')
+      payVisible.value = false
+      detailVisible.value = false
+      loadData()
+      loadDash()
+      return
+    }
     // 2. 模拟渠道支付
     const payRes = payType.value === 1 ? await wechatPay(payNo) : await alipayPay(payNo)
     ElMessage.success(payRes.data?.message || '支付成功')

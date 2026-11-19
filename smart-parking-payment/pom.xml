@@ -75,6 +75,14 @@
             <groupId>com.alibaba</groupId>
             <artifactId>druid-spring-boot-3-starter</artifactId>
         </dependency>
+
+        <!-- 支付宝开放平台官方 SDK：沙箱渠道（当面付/手机网站/电脑网站/退款/主动查询/异步通知验签）。
+             沙箱网关 https://openapi-sandbox.dl.alipaydev.com/gateway.do，与生产同一套接口，仅 host 不同。 -->
+        <dependency>
+            <groupId>com.alipay.sdk</groupId>
+            <artifactId>alipay-sdk-java</artifactId>
+            <version>4.40.560.ALL</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-amqp</artifactId>

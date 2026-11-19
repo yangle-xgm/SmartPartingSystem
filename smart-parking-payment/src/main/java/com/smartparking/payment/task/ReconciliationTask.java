@@ -38,16 +38,20 @@ public class ReconciliationTask {
                         .lt(PaymentRecord::getCreateTime, end)
                         .eq(PaymentRecord::getIsDeleted, 0));
 
-        int payCount = 0, refundCount = 0;
+        int payCount = 0, refundCount = 0, closedCount = 0;
         BigDecimal totalAmount = BigDecimal.ZERO, refundAmount = BigDecimal.ZERO;
 
         for (PaymentRecord r : records) {
-            if (r.getPayStatus() == 1) {
+            if (r.getPayStatus() == com.smartparking.common.core.constant.Constants.PAY_STATUS_PAID) {
                 payCount++;
                 totalAmount = totalAmount.add(r.getAmount());
-            } else if (r.getPayStatus() == 3) {
+            } else if (r.getPayStatus() == com.smartparking.common.core.constant.Constants.PAY_STATUS_REFUNDED) {
+                // 报告 P1-13：此处原判断 3，而 3 是「已关闭（超时未付）」，退款实为 2。
+                // 结果退款笔数/金额统计的是未付款关闭单，而真正的退款永远为 0。
                 refundCount++;
                 refundAmount = refundAmount.add(r.getAmount());
+            } else if (r.getPayStatus() == com.smartparking.common.core.constant.Constants.PAY_STATUS_CLOSED) {
+                closedCount++;
             }
         }
 
@@ -59,7 +63,8 @@ public class ReconciliationTask {
         recon.setRefundAmount(refundAmount);
         recon.setDiffAmount(BigDecimal.ZERO);
         recon.setStatus(payCount == 0 && refundCount == 0 ? 0 : (refundCount > 0 ? 1 : 0));
-        recon.setRemark(refundCount > 0 ? "存在退款记录" : "正常");
+        recon.setRemark(refundCount > 0 ? "存在退款记录"
+                : (closedCount > 0 ? "有" + closedCount + "笔超时关闭（未收款，不计入退款）" : "正常"));
 
         reconciliationMapper.insert(recon);
         log.info("支付对账完成 {}：支付{}笔/{}元，退款{}笔/{}元", yesterday, payCount, totalAmount, refundCount, refundAmount);

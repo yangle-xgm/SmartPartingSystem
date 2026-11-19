@@ -32,6 +32,9 @@ public class Device extends BaseEntity {
     @Schema(description = "MQTT通信主题")
     private String mqttTopic;
 
+    @Schema(description = "接入厂商通道（sandbox 沙箱 / mqtt-plain 通用MQTT / 厂商码）")
+    private String vendor;
+
     @Schema(description = "状态（0离线 1在线 2故障）")
     private Integer status;
 

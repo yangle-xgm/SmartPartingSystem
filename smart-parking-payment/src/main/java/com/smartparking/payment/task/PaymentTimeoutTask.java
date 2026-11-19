@@ -8,10 +8,8 @@ import com.smartparking.payment.service.PaymentRecordService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,14 +31,8 @@ public class PaymentTimeoutTask {
     @Value("${smart-parking.payment-timeout-minutes:30}")
     private int timeoutMinutes;
 
-    /** 订单服务地址 */
-    @Value("${smart-parking.order-url:http://localhost:8084}")
-    private String orderUrl;
-
     private final PaymentRecordService paymentRecordService;
     private final AuditClient auditClient;
-
-    private final RestTemplate restTemplate = new RestTemplate();
 
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
     public void scanTimeoutPayments() {
@@ -77,21 +69,13 @@ public class PaymentTimeoutTask {
         record.setPayStatus(Constants.PAY_STATUS_CLOSED);
         paymentRecordService.updateById(record);
 
-        // 2. 通知订单服务关闭订单、释放车位
-        boolean orderClosed = false;
-        try {
-            String url = orderUrl + "/api/order/internal/payment-timeout?orderId=" + record.getOrderId();
-            restTemplate.postForEntity(url, HttpEntity.EMPTY, String.class);
-            orderClosed = true;
-        } catch (Exception e) {
-            log.error("关闭超时订单失败：payNo={}, orderId={}, err={}",
-                    record.getPayNo(), record.getOrderId(), e.getMessage());
-        }
-
-        // 3. 操作审计
-        auditClient.record(record.getUserId(), null, "支付超时补偿", "SCHEDULED /payment-timeout",
+        // 2. 不再调用订单服务「关闭订单」。
+        //    订单在出场结算后已是 COMPLETED，客户的车早已离场，此时把订单打成 CANCELLED 会
+        //    凭空抹掉应收（报告 P0-7 的同类问题）；订单侧的 PaymentTimeoutTask 会按 exit_time
+        //    把 parking_order.pay_status 置为「已关闭(3)」，应收保留、可事后补缴。
+        auditClient.record(record.getUserId(), null, "支付超时关闭", "SCHEDULED /payment-timeout",
                 "{\"payNo\":\"" + record.getPayNo() + "\",\"orderId\":" + record.getOrderId()
-                        + ",\"amount\":" + record.getAmount() + ",\"orderClosed\":" + orderClosed + "}",
-                orderClosed);
+                        + ",\"amount\":" + record.getAmount() + "}",
+                true);
     }
 }

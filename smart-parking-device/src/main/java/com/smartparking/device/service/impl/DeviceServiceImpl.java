@@ -5,17 +5,18 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartparking.common.core.exception.BizException;
 import com.smartparking.common.core.exception.ErrorCode;
+import com.smartparking.device.gate.GateAdapter;
+import com.smartparking.device.gate.GateAdapterFactory;
+import com.smartparking.device.gate.GateResult;
+import com.smartparking.device.gate.GateAckRegistry;
 import com.smartparking.device.mapper.DeviceMapper;
+import com.smartparking.device.mqtt.MqttTransport;
 import com.smartparking.device.po.Device;
 import com.smartparking.device.query.DeviceQuery;
 import com.smartparking.device.service.DeviceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -38,25 +39,21 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> implements DeviceService {
 
-    @Value("${mqtt.broker:tcp://localhost:1883}")
-    private String mqttBroker;
-
-    @Value("${mqtt.client-id:smart-parking-device-service}")
-    private String clientId;
-
-    @Value("${mqtt.username:guest}")
-    private String mqttUsername;
-
-    @Value("${mqtt.password:guest}")
-    private String mqttPassword;
-
     /** 订单服务地址（设备联动入场） */
     @Value("${smart-parking.order-url:http://localhost:8084}")
     private String orderUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    /** MQTT 传输层（摄像头联动 + 道闸指令共用一条连接） */
+    private final MqttTransport mqttTransport;
 
-    private MqttClient mqttClient;
+    /** 道闸厂商适配器路由（按 device.vendor 选择协议实现） */
+    private final GateAdapterFactory gateAdapterFactory;
+
+    /** 道闸指令流水（演示/排障可见） */
+    private final GateAckRegistry gateAckRegistry;
+
+    private final RestTemplate restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate());
+
     private final Map<String, Device> deviceCache = new ConcurrentHashMap<>();
 
     /** 摄像头联动结果缓存（key=deviceNo#plateNo，订阅回调写入，同步接口读取） */
@@ -64,30 +61,14 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
 
     @PostConstruct
     public void init() {
-        try {
-            mqttClient = new MqttClient(mqttBroker, clientId);
-            MqttConnectOptions options = new MqttConnectOptions();
-            options.setCleanSession(true);
-            options.setConnectionTimeout(10);
-            options.setKeepAliveInterval(30);
-            options.setUserName(mqttUsername);
-            options.setPassword(mqttPassword.toCharArray());
-
-            mqttClient.connect(options);
-            log.info("MQTT连接成功：{}", mqttBroker);
-
-            // 订阅摄像头识别消息
-            subscribeCameraMessages();
-
-        } catch (MqttException e) {
-            log.error("MQTT连接失败：{}", e.getMessage(), e);
-        }
+        // 连接由 MqttTransport 统一维护（含自动重连与订阅恢复）
+        subscribeCameraMessages();
     }
 
     /**
      * 订阅摄像头识别消息
      */
-    private void subscribeCameraMessages() throws MqttException {
+    private void subscribeCameraMessages() {
         String topic = "device/camera/+/plate";
         IMqttMessageListener listener = (t, message) -> {
             try {
@@ -105,7 +86,7 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
                 log.error("处理摄像头消息失败：{}", e.getMessage(), e);
             }
         };
-        mqttClient.subscribe(topic, listener);
+        mqttTransport.subscribe(topic, listener);
     }
 
     /**
@@ -146,9 +127,10 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             if (Boolean.TRUE.equals(entry.get("recognized")) && entry.get("orderNo") != null) {
                 Device gate = findGateDevice();
                 if (gate != null) {
-                    sendMqttMessage(gate.getMqttTopic(), "OPEN");
-                    log.info("道闸已开启：deviceNo={}, topic={}（车牌 {} 入场，车位 {}）",
-                            gate.getDeviceNo(), gate.getMqttTopic(), plateNo, entry.get("spaceNo"));
+                    GateResult gateResult = dispatchOpen(gate, "入口识别放行：" + plateNo);
+                    log.info("道闸已开启：deviceNo={}, topic={}, transport={}, 回执={}（车牌 {} 入场，车位 {}）",
+                            gate.getDeviceNo(), gate.getMqttTopic(), gateResult.getTransport(),
+                            !gateResult.isAckTimeout(), plateNo, entry.get("spaceNo"));
                 } else {
                     log.warn("未找到在线道闸设备，跳过开闸");
                 }
@@ -225,9 +207,11 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             if (Boolean.TRUE.equals(exit.get("success"))) {
                 Device gate = findGateDevice();
                 if (gate != null) {
-                    sendMqttMessage(gate.getMqttTopic(), "OPEN");
-                    log.info("出口道闸已开启：deviceNo={}（车牌 {} 出场，费用 {}）",
-                            gate.getDeviceNo(), plateNo, exit.get("amount"));
+                    GateResult gateResult = dispatchOpen(gate, "出口结算放行：" + plateNo);
+                    result.put("gateAck", !gateResult.isAckTimeout());
+                    result.put("gateTransport", gateResult.getTransport());
+                    log.info("出口道闸已开启：deviceNo={}, transport={}（车牌 {} 出场，费用 {}）",
+                            gate.getDeviceNo(), gateResult.getTransport(), plateNo, exit.get("amount"));
                 } else {
                     log.warn("未找到在线道闸设备，跳过开闸");
                 }
@@ -242,11 +226,41 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     }
 
     /**
-     * 门岗手动出场放行：按车牌结算出场并开闸（低置信度人工确认闭环）
+     * 门岗手动出场放行：按车牌结算出场并开闸（低置信度人工确认闭环）。
+     *
+     * 报告 P1-11「有出无进」：原实现只是转调 mockExitRecognize，而后者在
+     * "查不到进行中订单"时一律不开闸 —— 于是识别异常、订单丢失、入场未建单的车
+     * 会被物理堵在出口，现场无任何旁路。门岗接口的语义本就应该允许"先放行后追账"，
+     * 因此这里补一条真正的旁路：无订单时也开闸，但结果里显式标记 manualRelease=true，
+     * 并打 WARN 日志留痕（订单服务侧已同时写了一条 needManualRelease 的审计记录），
+     * 便于事后按车牌追缴。注意：该接口在网关侧属于 /api/device/**，仅 role=1/2 可调。
      */
     @Override
     public Map<String, Object> manualExit(String deviceNo, String plateNo) {
-        return mockExitRecognize(deviceNo, plateNo);
+        Map<String, Object> result = mockExitRecognize(deviceNo, plateNo);
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            return result;
+        }
+        // 只有"订单侧明确表示无进行中订单"才走人工放行；联动异常/服务不可用时不放行，
+        // 避免把"订单服务挂了"误判成"这车没订单"而大面积免费放行。
+        if (!Boolean.TRUE.equals(result.get("needManualRelease"))) {
+            return result;
+        }
+        Device gate = findGateDevice();
+        if (gate == null) {
+            result.put("message", "无进行中订单，且未找到在线道闸设备，无法人工放行");
+            return result;
+        }
+        GateResult gateResult = dispatchOpen(gate, "门岗人工放行：" + plateNo);
+        log.warn("[人工放行] 车场出口无进行中订单，门岗手动开闸：plateNo={}, deviceNo={}, gate={}, transport={}",
+                plateNo, deviceNo, gate.getDeviceNo(), gateResult.getTransport());
+        result.put("success", true);
+        result.put("manualRelease", true);
+        result.put("gateDeviceNo", gate.getDeviceNo());
+        result.put("gateTransport", gateResult.getTransport());
+        result.put("gateAck", !gateResult.isAckTimeout());
+        result.put("message", "该车牌无进行中订单，已人工放行开闸（已留痕，请按车牌事后追缴）");
+        return result;
     }
 
     /**
@@ -256,8 +270,20 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
         int conf = confidence == null ? 100 : confidence;
         String topic = "device/camera/" + deviceNo + "/plate";
         String payload = "{\"plateNo\":\"" + plateNo + "\",\"confidence\":" + conf + "}";
-        sendMqttMessage(topic, payload);
+        mqttTransport.publish(topic, payload, 1);
         log.info("模拟摄像头已发布识别消息：topic={}, payload={}", topic, payload);
+    }
+
+    /**
+     * 通过厂商适配器下发开闸指令。
+     *
+     * <p>适配器返回 success=false（仅 strict-ack 模式可能出现）时不抛出：
+     * 自动放行/人工放行链路里，抛异常会让调用方认为"结算失败"从而重复结算。
+     * 失败信息已由适配器 ERROR 日志与指令流水记录，运维可见。
+     */
+    private GateResult dispatchOpen(Device gate, String reason) {
+        GateAdapter adapter = gateAdapterFactory.select(gate);
+        return adapter.open(gate, reason);
     }
 
     /**
@@ -344,9 +370,9 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             throw new BizException(ErrorCode.GATE_ERROR, "道闸离线，无法控制");
         }
 
-        // 发送MQTT指令
-        sendMqttMessage(device.getMqttTopic(), "OPEN");
-        log.info("发送道闸开启指令：deviceNo={}", deviceNo);
+        GateResult result = dispatchOpen(device, "管理端手动开闸");
+        log.info("发送道闸开启指令：deviceNo={}, vendor={}, transport={}, 回执={}",
+                deviceNo, result.getVendor(), result.getTransport(), !result.isAckTimeout());
     }
 
     @Override
@@ -359,9 +385,14 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
             throw new BizException(ErrorCode.GATE_ERROR, "道闸离线，无法控制");
         }
 
-        // 发送MQTT指令
-        sendMqttMessage(device.getMqttTopic(), "CLOSE");
-        log.info("发送道闸关闭指令：deviceNo={}", deviceNo);
+        GateResult result = gateAdapterFactory.select(device).close(device);
+        log.info("发送道闸关闭指令：deviceNo={}, vendor={}, transport={}, 回执={}",
+                deviceNo, result.getVendor(), result.getTransport(), !result.isAckTimeout());
+    }
+
+    @Override
+    public List<Map<String, Object>> recentGateCommands(int limit) {
+        return gateAckRegistry.recent(limit);
     }
 
     @Override
@@ -393,17 +424,5 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
     private Device getDeviceByNo(String deviceNo) {
         return this.getOne(new LambdaQueryWrapper<Device>()
                 .eq(Device::getDeviceNo, deviceNo));
-    }
-
-    private void sendMqttMessage(String topic, String payload) {
-        try {
-            if (mqttClient != null && mqttClient.isConnected()) {
-                MqttMessage message = new MqttMessage(payload.getBytes(StandardCharsets.UTF_8));
-                message.setQos(1);
-                mqttClient.publish(topic, message);
-            }
-        } catch (MqttException e) {
-            log.error("MQTT消息发送失败：topic={}, error={}", topic, e.getMessage(), e);
-        }
     }
 }

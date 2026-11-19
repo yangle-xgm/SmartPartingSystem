@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -39,6 +40,7 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
     private final RabbitTemplate rabbitTemplate;
     private final AuditClient auditClient;
     private final com.smartparking.payment.mapper.ShareIncomeMapper shareIncomeMapper;
+    private final com.smartparking.payment.channel.alipay.AlipaySandboxService alipaySandboxService;
 
     private static final DateTimeFormatter PAY_NO_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
@@ -118,6 +120,18 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             throw new BizException(ErrorCode.PAY_STATUS_ERROR, "订单服务暂不可用，请稍后再试");
         }
 
+        // 幂等（报告 P1-7）：同一订单已有待支付流水时直接复用，避免双击/重试生成多笔
+        // 可各自 mockPay 成功的流水，形成"一笔订单扣多次"的入口。
+        PaymentRecord pending = this.getOne(new LambdaQueryWrapper<PaymentRecord>()
+                .eq(PaymentRecord::getOrderId, orderId)
+                .eq(PaymentRecord::getPayStatus, 0)
+                .orderByDesc(PaymentRecord::getCreateTime)
+                .last("LIMIT 1"));
+        if (pending != null) {
+            log.info("订单 {} 已有待支付流水 {}，复用", orderId, pending.getPayNo());
+            return pending;
+        }
+
         PaymentRecord record = new PaymentRecord();
         record.setPayNo(generatePayNo());
         record.setOrderId(orderId);
@@ -148,10 +162,32 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             return;
         }
 
-        record.setPayStatus(1);
-        record.setTransactionId(transactionId);
-        record.setPayTime(LocalDateTime.now());
-        this.updateById(record);
+        // 条件更新实现幂等（报告 P0-9）：并发回调时只有一个事务能命中下面的状态集合，
+        // 另一个 affected=0 直接返回，避免重复分润与重复通知订单服务。
+        //
+        // 关于 CLOSED(3)：PAY_STATUS_CLOSED 只是本地"超时关单"标记（渠道侧并未关单，
+        // 用户在超时边界付款完全可能）。渠道回调 = 钱已到账的事实，优先级必须高于本地
+        // 超时判断，否则会出现"用户付了钱、系统记 0 元/记关闭"的掉单。因此这里允许
+        // 0/3/4 → 1；只把 PAID(1) 与 REFUNDED(2) 挡在外面（已结算 / 已退款不可回跳）。
+        boolean fromClosed = record.getPayStatus() != null && record.getPayStatus() == Constants.PAY_STATUS_CLOSED;
+        boolean paid = this.update(new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<PaymentRecord>()
+                .eq(PaymentRecord::getId, record.getId())
+                .in(PaymentRecord::getPayStatus, Constants.PAY_STATUS_UNPAID,
+                        Constants.PAY_STATUS_CLOSED, Constants.PAY_STATUS_FAILED)
+                .set(PaymentRecord::getPayStatus, Constants.PAY_STATUS_PAID)
+                .set(PaymentRecord::getTransactionId, transactionId)
+                .set(PaymentRecord::getPayTime, LocalDateTime.now()));
+        if (!paid) {
+            PaymentRecord latest = this.getById(record.getId());
+            if (latest != null && latest.getPayStatus() == 1) {
+                log.warn("支付记录{}已被并发回调置为成功，跳过", payNo);
+                return;
+            }
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "支付记录状态已变更，无法置为成功");
+        }
+        if (fromClosed) {
+            log.warn("支付记录{}本地已超时关单，但收到渠道成功回调，按渠道为准置为已支付", payNo);
+        }
 
         // 操作审计：支付成功
         auditClient.record(record.getUserId(), null, "支付成功", "POST /api/payment/{channel}/pay",
@@ -231,20 +267,77 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             String spaceNo = String.valueOf(spaceData.get("spaceNo"));
 
             // 3. 记录真实分润
+            java.math.BigDecimal ownerRatio = new java.math.BigDecimal("0.7");
+            java.math.BigDecimal[] split = splitShareAmount(record.getAmount(), ownerRatio);
             ShareIncome share = new ShareIncome();
             share.setPaymentId(record.getId());
             share.setSpaceId(spaceId);
             share.setOwnerId(ownerId);
             share.setTotalAmount(record.getAmount());
-            share.setOwnerRatio(new java.math.BigDecimal("0.7"));
-            share.setOwnerAmount(record.getAmount().multiply(new java.math.BigDecimal("0.7")));
-            share.setPropertyAmount(record.getAmount().multiply(new java.math.BigDecimal("0.3")));
+            share.setOwnerRatio(ownerRatio);
+            share.setOwnerAmount(split[0]);
+            share.setPropertyAmount(split[1]);
             shareIncomeMapper.insert(share);
             log.info("共享车位分润：paymentId={}, space={}, owner={}, 业主={}, 物业={}",
                     record.getId(), spaceNo, ownerId, share.getOwnerAmount(), share.getPropertyAmount());
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // uk_payment_id 兜底：并发回调重复分润时数据库直接拒绝，属预期行为
+            log.warn("分润已存在，跳过重复写入：paymentId={}", record.getId());
         } catch (Exception e) {
             log.warn("分润计算失败（不阻断支付）：orderId={}, err={}", record.getOrderId(), e.getMessage());
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean settleFromChannel(String payNo, String transactionId, BigDecimal channelAmount) {
+        PaymentRecord record = this.getOne(new LambdaQueryWrapper<PaymentRecord>()
+                .eq(PaymentRecord::getPayNo, payNo));
+        if (record == null) {
+            throw new BizException(ErrorCode.PAY_NOT_FOUND);
+        }
+        assertAmountMatches(payNo, record.getAmount(), channelAmount);
+        paymentSuccess(payNo, transactionId);
+        return true;
+    }
+
+    /**
+     * 渠道金额一致性校验（资金安全闸门）。
+     *
+     * <p>渠道回传的实收金额必须与本地应付完全相等。少收（改价攻击）和多收（串单/渠道误操作）
+     * 一律拒绝入账并在 ERROR 日志里留下双方金额，由人工对账处理 —— 宁可挡住一笔真实支付，
+     * 也不接受账实不符的核销。
+     *
+     * <p>用 compareTo 而不是 equals：{@code BigDecimal("100")} 与 {@code "100.00"} 数值相等、
+     * 标度不同，equals 会误判。
+     *
+     * <p>抽成静态方法是为了能被单测直接锁定，不需要构造整个 service 的依赖。
+     */
+    static void assertAmountMatches(String payNo, BigDecimal localAmount, BigDecimal channelAmount) {
+        if (channelAmount == null) {
+            log.error("[资金安全] 渠道未回传金额，拒绝入账 payNo={}", payNo);
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "渠道未回传支付金额，已拒绝入账");
+        }
+        if (localAmount == null || localAmount.compareTo(channelAmount) != 0) {
+            log.error("[资金安全] 渠道金额与本地应付不一致 payNo={}, 本地={}, 渠道={}",
+                    payNo, localAmount, channelAmount);
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "支付金额与订单应付不一致，已拒绝入账");
+        }
+    }
+
+    /**
+     * 分润金额拆分：{@code [业主所得, 物业所得]}。
+     *
+     * <p><b>必须保证两者之和恒等于总额</b>。若两边各自乘比例再交给数据库按
+     * {@code decimal(10,2)} 舍入，会出现账不平：实测总额 0.05 元时
+     * {@code 0.035→0.04} 与 {@code 0.015→0.02} 相加为 0.06，凭空多出 1 分钱。
+     * 因此业主那份先四舍五入到分，物业那份用「总额 − 业主」反算。
+     *
+     * <p>抽成静态方法是为了能被单测直接锁定，不需要构造整个 service 的依赖。
+     */
+    static BigDecimal[] splitShareAmount(BigDecimal total, BigDecimal ownerRatio) {
+        BigDecimal owner = total.multiply(ownerRatio).setScale(2, RoundingMode.HALF_UP);
+        return new BigDecimal[]{owner, total.subtract(owner)};
     }
 
     @Override
@@ -272,7 +365,18 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             throw new BizException(ErrorCode.PAY_STATUS_ERROR, "只有成功支付的记录才能退款");
         }
 
-        // 模拟第三方退款成功（演示环境不调真实网关）；状态机：未支付0 → 已支付1 → 已退款2
+        // 渠道退款先行（支付宝沙箱 payType=2）：渠道退成功后才改本地状态，
+        // 避免"本地已退款、渠道未退"形成资金差。渠道侧 out_request_no 固定为 payNo-R1，
+        // 因此本地更新失败后用同一笔重试不会重复退款（渠道幂等）。
+        if (Integer.valueOf(2).equals(record.getPayType()) && alipaySandboxService.isEnabled()) {
+            if (!alipaySandboxService.isReady()) {
+                throw new BizException(ErrorCode.PAY_STATUS_ERROR,
+                        "支付宝沙箱已开启但密钥未配置，无法原路退款；请补齐配置或关闭 smart-parking.alipay.enabled");
+            }
+            alipaySandboxService.refund(payNo, record.getAmount());
+        }
+
+        // 状态机：未支付0 → 已支付1 → 已退款2（微信/现金通道仍为本地模拟退款）
         record.setPayStatus(2); // 已退款
         this.updateById(record);
 

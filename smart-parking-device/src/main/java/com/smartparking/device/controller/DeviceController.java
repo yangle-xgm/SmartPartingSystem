@@ -122,6 +122,13 @@ public class DeviceController {
         return Result.success(result);
     }
 
+    @Operation(summary = "道闸指令流水（沙箱/厂商通道下发记录，新的在前）")
+    @GetMapping("/gate/command-log")
+    public Result<java.util.List<Map<String, Object>>> commandLog(
+            @Parameter(description = "返回条数（默认20，最多200）") @RequestParam(required = false, defaultValue = "20") Integer limit) {
+        return Result.success(deviceService.recentGateCommands(limit));
+    }
+
     // ==================== 内部接口 ====================
 
     @Operation(summary = "更新设备心跳（内部接口）")

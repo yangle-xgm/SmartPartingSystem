@@ -23,6 +23,17 @@ public interface PaymentRecordService extends IService<PaymentRecord> {
     void paymentSuccess(String payNo, String transactionId);
 
     /**
+     * 渠道侧确认到账后结算（异步通知 / 主动查询共用）。
+     *
+     * <p>与裸调 {@link #paymentSuccess} 的区别：这里强制校验渠道金额与本地应付金额一致，
+     * 不一致直接拒绝入账并告警 —— 防"1 分钱支付 100 元订单"这类改价攻击。
+     *
+     * @param channelAmount 渠道回传的实收金额
+     * @return true 表示已置为已支付（含并发下已被其它线程置成功的幂等情形）
+     */
+    boolean settleFromChannel(String payNo, String transactionId, BigDecimal channelAmount);
+
+    /**
      * 支付失败回调
      */
     void paymentFail(String payNo, String reason);

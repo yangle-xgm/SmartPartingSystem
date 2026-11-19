@@ -3,7 +3,7 @@
 -- 跨模块物理外键保留；依赖 smart-parking-user 先迁移（无外部 FK 依赖）。
 -- ============================================================
 
-CREATE TABLE `payment_record` (
+CREATE TABLE IF NOT EXISTS `payment_record` (
   `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
   `pay_no` VARCHAR(32) NOT NULL COMMENT '支付流水号',
   `order_id` BIGINT UNSIGNED NOT NULL COMMENT '关联订单ID',
@@ -24,7 +24,7 @@ CREATE TABLE `payment_record` (
   CONSTRAINT `fk_payment_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='支付记录表';
 
-CREATE TABLE `payment_reconciliation` (
+CREATE TABLE IF NOT EXISTS `payment_reconciliation` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `recon_date` DATE NOT NULL COMMENT '对账日期',
   `pay_count` INT UNSIGNED DEFAULT 0 COMMENT '支付笔数',
@@ -39,7 +39,7 @@ CREATE TABLE `payment_reconciliation` (
   UNIQUE KEY `uk_recon_date` (`recon_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='支付对账表';
 
-CREATE TABLE share_income (
+CREATE TABLE IF NOT EXISTS share_income (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   space_id BIGINT COMMENT '车位ID',
   owner_id BIGINT COMMENT '业主ID',

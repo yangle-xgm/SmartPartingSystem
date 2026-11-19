@@ -63,6 +63,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="deviceName" label="设备名称" min-width="160" />
+        <el-table-column label="厂商通道" width="120">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain" :type="row.vendor === 'mqtt-plain' ? 'info' : 'success'">
+              {{ row.vendor || 'sandbox' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
             <el-tag :type="typeTag[row.deviceType]" effect="light">{{ deviceTypeMap[row.deviceType] }}</el-tag>
@@ -109,7 +116,43 @@
       />
     </section>
 
-    <!-- 注册 / 编辑 -->
+    <!-- 道闸指令流水：验证「下发 → 厂商通道 → 设备回执」闭环 -->
+    <section class="sp-card device-cmd">
+      <div class="device-cmd__head">
+        <div>
+          <h3 class="device-cmd__title">道闸指令流水</h3>
+          <p class="device-cmd__desc">
+            最近 20 条道闸指令：报文、通道、是否收到设备回执与耗时。沙箱通道由内置虚拟道闸应答回执。
+          </p>
+        </div>
+        <el-button size="small" :loading="cmdLoading" @click="loadCommands">刷新</el-button>
+      </div>
+      <el-table :data="commandLog" size="small" v-loading="cmdLoading">
+        <el-table-column label="时间" width="180">
+          <template #default="{ row }">{{ shortTime(row.time) }}</template>
+        </el-table-column>
+        <el-table-column prop="deviceNo" label="设备" width="130" />
+        <el-table-column label="指令" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.action === 'OPEN' ? 'success' : 'info'">{{ row.action }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="transport" label="通道" width="100" />
+        <el-table-column label="回执" width="100">
+          <template #default="{ row }">
+            <span :class="row.ackTimeout ? 'cmd-warn' : 'cmd-ok'">{{ row.ackTimeout ? '未回执' : '已回执' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="latencyMs" label="耗时(ms)" width="100" />
+        <el-table-column prop="payload" label="报文" min-width="260" show-overflow-tooltip />
+        <template #empty>
+          <div class="sp-empty">
+            <span class="sp-empty__star">✦</span>
+            <span class="sp-empty__text">还没有指令记录，点一次「开闸」试试</span>
+          </div>
+        </template>
+      </el-table>
+    </section>
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑设备' : '注册设备'" width="520px">
       <el-form ref="formRef" :model="formData" :rules="formRules" label-width="96px">
         <el-row :gutter="12">
@@ -143,6 +186,12 @@
         </el-row>
         <el-form-item label="MQTT 主题">
           <el-input v-model="formData.mqttTopic" placeholder="如 device/gate/in/control" />
+        </el-form-item>
+        <el-form-item label="厂商通道">
+          <el-select v-model="formData.vendor" placeholder="默认沙箱" style="width: 100%">
+            <el-option label="sandbox（沙箱：JSON 指令 + 回执）" value="sandbox" />
+            <el-option label="mqtt-plain（通用 MQTT 纯文本）" value="mqtt-plain" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -271,6 +320,11 @@
             <code>{{ detail.mqttTopic || '未配置' }}</code>
           </div>
 
+          <div class="device-topic">
+            <span>厂商通道</span>
+            <code>{{ detail.vendor || 'sandbox' }}</code>
+          </div>
+
           <div class="device-actions">
             <el-button v-if="detail.deviceType === 1" type="success" @click="handleGate(detail, true)">开闸</el-button>
             <el-button v-if="detail.deviceType === 1" type="warning" plain @click="handleGate(detail, false)">关闸</el-button>
@@ -299,7 +353,8 @@ import {
   closeGate,
   mockCamera,
   mockExitCamera,
-  gateExit
+  gateExit,
+  getGateCommandLog
 } from '@/api/device'
 import { inviteEntry } from '@/api/order'
 
@@ -340,7 +395,10 @@ const typeTag = { 1: 'warning', 2: 'primary', 3: 'success', 4: 'info' }
 const searchForm = reactive({ deviceType: '', status: '' })
 const pagination = reactive({ current: 1, size: 10, total: 0 })
 
-const formData = ref({ deviceNo: '', deviceName: '', deviceType: 1, location: '', mqttTopic: '' })
+const commandLog = ref([])
+const cmdLoading = ref(false)
+
+const formData = ref({ deviceNo: '', deviceName: '', deviceType: 1, location: '', mqttTopic: '', vendor: 'sandbox' })
 const formRules = {
   deviceNo: [{ required: true, message: '请输入设备编号', trigger: 'blur' }],
   deviceName: [{ required: true, message: '请输入设备名称', trigger: 'blur' }],
@@ -355,6 +413,20 @@ onMounted(() => reload())
 const reload = () => {
   loadData()
   loadOverview()
+  loadCommands()
+}
+
+/** 道闸指令流水（内存态，重启清空） */
+const loadCommands = async () => {
+  cmdLoading.value = true
+  try {
+    const res = await getGateCommandLog(20)
+    commandLog.value = res.data || []
+  } catch (e) {
+    commandLog.value = []
+  } finally {
+    cmdLoading.value = false
+  }
 }
 
 const loadOverview = async () => {
@@ -385,7 +457,7 @@ const resetSearch = () => { Object.assign(searchForm, { deviceType: '', status: 
 
 const handleAdd = () => {
   isEdit.value = false
-  formData.value = { deviceNo: '', deviceName: '', deviceType: 1, location: '', mqttTopic: '' }
+  formData.value = { deviceNo: '', deviceName: '', deviceType: 1, location: '', mqttTopic: '', vendor: 'sandbox' }
   dialogVisible.value = true
 }
 
@@ -460,9 +532,16 @@ const handleGate = async (row, isOpen) => {
   } catch (e) {
     return
   }
-  if (isOpen) await openGate(row.deviceNo)
-  else await closeGate(row.deviceNo)
-  ElMessage.success(isOpen ? '道闸已开启' : '道闸已关闭')
+  try {
+    if (isOpen) await openGate(row.deviceNo)
+    else await closeGate(row.deviceNo)
+    ElMessage.success(isOpen ? '道闸已开启' : '道闸已关闭')
+  } catch (e) {
+    toastOnce(e, isOpen ? '开闸失败' : '关闸失败')
+  } finally {
+    // 无论成功与否都刷新流水：失败原因（离线/无回执）本身就是要在流水里看的信息
+    loadCommands()
+  }
 }
 
 /* ============ 入场识别 ============ */
@@ -512,7 +591,12 @@ const sendExit = async () => {
   try {
     const res = await gateExit(exitForm.value.deviceNo, exitForm.value.plateNo.trim())
     exitResult.value = res.data || {}
-    ElMessage.success('出场结算完成')
+    // 正常结算 vs 无订单人工放行（P1-11）：两者都开闸，但后者需要门岗意识到"这单没收到钱"
+    if (exitResult.value.manualRelease) {
+      ElMessage.warning(exitResult.value.message || '该车牌无进行中订单，已人工放行开闸')
+    } else {
+      ElMessage.success(exitResult.value.message || '出场结算完成')
+    }
     reload()
   } catch (e) {
     toastOnce(e, '放行失败')
@@ -670,5 +754,41 @@ defineExpose({ openInvite })
   display: flex;
   gap: 10px;
   margin-top: 18px;
+}
+
+/* ---- 道闸指令流水 ---- */
+.device-cmd {
+  margin-top: 16px;
+}
+
+.device-cmd__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.device-cmd__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sp-text);
+}
+
+.device-cmd__desc {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--sp-text-3);
+}
+
+.cmd-ok {
+  color: var(--sp-teal);
+  font-size: 12.5px;
+}
+
+.cmd-warn {
+  color: var(--sp-gold);
+  font-size: 12.5px;
 }
 </style>

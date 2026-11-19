@@ -61,4 +61,10 @@ public interface DeviceService extends IService<Device> {
      * 门岗手动出场放行（按车牌结算出场并开闸）
      */
     Map<String, Object> manualExit(String deviceNo, String plateNo);
+
+    /**
+     * 最近的道闸指令流水（含报文、通道、回执、耗时），新的在前。
+     * 演示与排障用：直观看到「指令下发了什么、设备有没有回执」。
+     */
+    java.util.List<Map<String, Object>> recentGateCommands(int limit);
 }

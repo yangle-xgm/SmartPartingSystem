@@ -138,6 +138,7 @@ import StatCard from '@/components/StatCard.vue'
 import { getOrderList, exitOrder } from '@/api/order'
 import { getVehicleList } from '@/api/vehicle'
 import { createPayment, wechatPay, alipayPay } from '@/api/payment'
+import { isAlipaySandboxReady, payWithAlipaySandbox } from '@/utils/alipaySandbox'
 import { getUserId } from '@/api/user'
 import { displayPlate } from '@/utils/plate'
 
@@ -255,6 +256,15 @@ const handleConfirmPay = async () => {
     })
     const payNo = createRes.data?.payNo
     if (!payNo) throw new Error('支付流水创建失败')
+    // 支付宝沙箱：跳转收银台 + 轮询确认到账
+    if (payType.value === 2 && (await isAlipaySandboxReady())) {
+      const result = await payWithAlipaySandbox(payNo)
+      if (!result.ok) throw new Error(result.message || '支付未完成')
+      ElMessage.success('支付宝支付成功')
+      payVisible.value = false
+      loadData()
+      return
+    }
     const payRes = payType.value === 1 ? await wechatPay(payNo) : await alipayPay(payNo)
     ElMessage.success(payRes.data?.message || '支付成功')
     payVisible.value = false

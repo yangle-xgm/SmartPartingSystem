@@ -155,6 +155,8 @@ const rule = ref(null)
 const loading = ref(true)
 const errorText = ref('')
 const payVisible = ref(false)
+/** 支付中锁：避免连点产生多笔流水 */
+const paying = ref(false)
 
 const payActions = [
   { name: '微信支付（模拟）', subname: '演示环境，确认即支付成功', value: 1 },
@@ -245,6 +247,9 @@ async function handleCancel() {
 }
 
 async function onPaySelect(action) {
+  // 防重：双击/连点会生成多笔流水并各自置成功（报告 P2-10），与 Monthly.vue 保持一致
+  if (paying.value) return
+  paying.value = true
   payVisible.value = false
   try {
     const createRes = await createPayment(order.value.id, userId, order.value.amount, action.value)
@@ -258,9 +263,13 @@ async function onPaySelect(action) {
     if (payRes.code === 200) {
       showSuccessToast(payRes.data?.message || '支付成功')
       load()
+    } else {
+      toastOnce(payRes, '支付失败')
     }
   } catch (e) {
     toastOnce(e, '支付失败')
+  } finally {
+    paying.value = false
   }
 }
 </script>

@@ -240,7 +240,9 @@ const greeting = computed(() => {
 })
 
 const ongoingOrders = computed(() => allOrders.value.filter(o => o.status === 0))
-const pendingPayOrders = computed(() => allOrders.value.filter(o => o.status === 1 && o.payStatus === 0))
+// 待缴费只算真正欠费的单：0 元单（免费时长内出场）不该出现在"待缴费"里
+const pendingPayOrders = computed(() => allOrders.value.filter(
+  o => o.status === 1 && o.payStatus === 0 && Number(o.amount) > 0))
 const pendingAmount = computed(() =>
   pendingPayOrders.value.reduce((s, o) => s + (Number(o.amount) || 0), 0).toFixed(2))
 const recentOrders = computed(() => allOrders.value.filter(o => o.status === 1).slice(0, 3))

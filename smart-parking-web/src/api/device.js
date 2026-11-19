@@ -87,3 +87,12 @@ export function gateExit(deviceNo, plateNo) {
     params: { deviceNo, plateNo }
   })
 }
+
+// 道闸指令流水（下发报文 / 通道 / 是否回执 / 耗时）
+export function getGateCommandLog(limit = 20) {
+  return request({
+    url: '/device/gate/command-log',
+    method: 'get',
+    params: { limit }
+  })
+}

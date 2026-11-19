@@ -23,3 +23,24 @@ export function getMyShareIncome() {
     method: 'get'
   })
 }
+
+/**
+ * 申请电子发票（仅限本人已支付订单，一单一票）。
+ * @param {{orderId:number,titleType:1|2,title:string,taxNo?:string,email?:string}} data
+ */
+export function applyInvoice(data) {
+  return request({
+    url: '/payment/invoice/apply',
+    method: 'post',
+    data
+  })
+}
+
+/** 我的发票列表 */
+export function getMyInvoices() {
+  return request({
+    url: '/payment/invoice/my',
+    method: 'get',
+    silent: true
+  })
+}

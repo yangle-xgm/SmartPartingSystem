@@ -121,6 +121,7 @@ import { useRouter } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showToast, showSuccessToast } from 'vant'
 import { getOrderList, cancelOrder, createPayment, wechatPay, alipayPay } from '@/api/order'
+import { isAlipaySandboxReady, payWithAlipaySandbox } from '@/utils/alipaySandbox'
 import { getUserId } from '@/api/user'
 import { displayPlate } from '@/utils/plate'
 import TabBar from '@/components/TabBar.vue'
@@ -150,8 +151,8 @@ const payVisible = ref(false)
 const payAmount = ref('0.00')
 const payingOrder = ref(null)
 const payActions = [
-  { name: '微信支付（模拟）', subname: '演示环境，确认即支付成功', value: 1 },
-  { name: '支付宝（模拟）', subname: '演示环境，确认即支付成功', value: 2 }
+  { name: '微信支付', subname: '演示通道，确认即支付成功', value: 1 },
+  { name: '支付宝', subname: '沙箱开启时跳转支付宝收银台', value: 2 }
 ]
 
 const ongoing = computed(() => allOrders.value.filter(o => o.status === 0))
@@ -251,7 +252,18 @@ async function onPaySelect(action) {
       showToast('支付流水号生成失败')
       return
     }
-    // 2) 模拟第三方支付回调
+    // 支付宝沙箱：跳转收银台 + 轮询查询确认到账（真实扣沙箱账户余额）
+    if (action.value === 2 && (await isAlipaySandboxReady())) {
+      const result = await payWithAlipaySandbox(payNo)
+      if (result.ok) {
+        showSuccessToast('支付宝支付成功')
+        loadData()
+      } else {
+        showToast(result.message || '支付未完成')
+      }
+      return
+    }
+    // 2) 模拟第三方支付回调（微信通道 / 未配置沙箱时的支付宝）
     const payRes = action.value === 1 ? await wechatPay(payNo) : await alipayPay(payNo)
     if (payRes.code === 200) {
       showSuccessToast(payRes.data?.message || '支付成功')
