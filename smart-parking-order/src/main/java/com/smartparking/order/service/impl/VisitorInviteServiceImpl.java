@@ -56,7 +56,7 @@ public class VisitorInviteServiceImpl extends ServiceImpl<VisitorInviteMapper, V
     @Value("${smart-parking.device-url:http://localhost:8087}")
     private String deviceUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate());
 
     @Override
     @Transactional(rollbackFor = Exception.class)

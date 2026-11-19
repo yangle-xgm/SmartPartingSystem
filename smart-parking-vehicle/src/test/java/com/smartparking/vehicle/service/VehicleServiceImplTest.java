@@ -17,12 +17,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -85,7 +87,7 @@ class VehicleServiceImplTest {
             return 1;
         });
 
-        Vehicle result = vehicleService.bindVehicle(input);
+        Vehicle result = vehicleService.bindVehicle(input, String.valueOf(OWNER_ID), "0");
 
         String cipher = AesUtils.encrypt(PLAIN_PLATE);
         assertEquals(cipher, persisted.get(), "入库必须是 AES 密文，禁止明文落库");
@@ -107,7 +109,7 @@ class VehicleServiceImplTest {
         when(vehicleMapper.selectCount(any())).thenReturn(0L);
         when(vehicleMapper.insert(any(Vehicle.class))).thenReturn(1);
 
-        vehicleService.bindVehicle(input);
+        vehicleService.bindVehicle(input, String.valueOf(OWNER_ID), "0");
 
         ArgumentCaptor<Object> params = ArgumentCaptor.forClass(Object.class);
         verify(auditClient).record(eq(OWNER_ID), isNull(), eq("绑定车辆"), eq("POST /api/vehicle/bind"),
@@ -126,7 +128,7 @@ class VehicleServiceImplTest {
 
         when(vehicleMapper.selectCount(any())).thenReturn(1L);
 
-        BizException ex = assertThrows(BizException.class, () -> vehicleService.bindVehicle(input));
+        BizException ex = assertThrows(BizException.class, () -> vehicleService.bindVehicle(input, String.valueOf(OWNER_ID), "0"));
 
         assertEquals(ErrorCode.DATA_DUPLICATE.getCode(), ex.getCode(), "重复车牌应返回 409 业务码");
         verify(vehicleMapper, never()).insert(any(Vehicle.class));
@@ -167,6 +169,29 @@ class VehicleServiceImplTest {
         assertEquals(ErrorCode.FORBIDDEN.getCode(), ex.getCode());
         verify(vehicleMapper, never()).deleteById(anyLong());
         verify(auditClient, never()).record(any(), any(), anyString(), anyString(), any(), eq(true));
+    }
+
+    @Test
+    @DisplayName("绑定车辆：请求体伪造月卡字段与归属人无效（报告 P0-4）")
+    void bindVehicle_ignoresForgedMonthlyFields() {
+        Vehicle input = new Vehicle();
+        input.setPlateNo(PLAIN_PLATE);
+        input.setOwnerId(9999L);              // 伪造归属
+        input.setType(2);                     // 伪造月租车
+        input.setMonthlyExpire(LocalDateTime.now().plusYears(50));
+
+        when(vehicleMapper.selectCount(any())).thenReturn(0L);
+        AtomicReference<Vehicle> saved = new AtomicReference<>();
+        when(vehicleMapper.insert(any(Vehicle.class))).thenAnswer(invocation -> {
+            saved.set(invocation.getArgument(0));
+            return 1;
+        });
+
+        vehicleService.bindVehicle(input, String.valueOf(OWNER_ID), "0");
+
+        assertEquals(0, saved.get().getType(), "绑定时不得由前端指定为月租车，否则绕过月卡付费");
+        assertNull(saved.get().getMonthlyExpire(), "绑定时不得由前端指定月卡有效期");
+        assertEquals(OWNER_ID, saved.get().getOwnerId(), "业主绑车归属必须强制为登录人");
     }
 
     @Test

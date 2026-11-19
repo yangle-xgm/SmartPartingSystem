@@ -18,13 +18,17 @@ public interface VehicleService extends IService<Vehicle> {
 
     /**
      * 绑定车辆
+     *
+     * @param vehicle       前端提交的车辆信息（type/monthlyExpire 等敏感字段会被服务端覆盖）
+     * @param currentUserId 网关注入的登录人ID
+     * @param currentRole   网关注入的角色（0 业主 / 1 物业 / 2 超管）
      */
-    Vehicle bindVehicle(Vehicle vehicle);
+    Vehicle bindVehicle(Vehicle vehicle, String currentUserId, String currentRole);
 
     /**
-     * 解绑车辆
+     * 解绑车辆：归属一律以网关注入的登录人为准，不再信任请求参数
      */
-    void unbindVehicle(Long vehicleId, Long userId);
+    void unbindVehicle(Long vehicleId, Long currentUserId);
 
     /**
      * 根据车牌号查询车辆（内部接口）

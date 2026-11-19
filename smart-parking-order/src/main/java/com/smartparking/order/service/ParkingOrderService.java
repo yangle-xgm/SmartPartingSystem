@@ -63,6 +63,16 @@ public interface ParkingOrderService extends IService<ParkingOrder> {
     void timeoutClose(Long orderId);
 
     /**
+     * 出场后超时未付款：把 parking_order.pay_status 置为「已关闭」。
+     *
+     * <p>条件更新（status=COMPLETED AND pay_status=UNPAID），不改变订单状态、不释放车位、
+     * 不清零应收；并发支付时 affected=0，不会覆盖用户正在进行中的支付。
+     *
+     * @return true 表示本次确实关闭了一条记录
+     */
+    boolean markPaymentClosed(Long orderId);
+
+    /**
      * 退款回调：订单支付状态置为已退款（不允许再次支付）
      */
     void refundOrder(Long orderId);

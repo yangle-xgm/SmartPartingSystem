@@ -51,7 +51,23 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
     }
 
     @Override
-    public Vehicle bindVehicle(Vehicle vehicle) {
+    public Vehicle bindVehicle(Vehicle vehicle, String currentUserId, String currentRole) {
+        // 报告 P0-4：原实现整体落库，前端可伪造 type=2 + monthlyExpire=2099 变成"月租车"绕过月卡付费
+        Long loginUserId = parseUserId(currentUserId);
+        if ("0".equals(currentRole)) {
+            // 业主只能给自己绑车，忽略请求体里的 ownerId，防替他人绑车制造脏数据
+            if (loginUserId == null) {
+                throw new BizException(ErrorCode.UNAUTHORIZED, "登录状态失效，请重新登录");
+            }
+            vehicle.setOwnerId(loginUserId);
+        } else if (vehicle.getOwnerId() == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "缺少车主信息");
+        }
+
+        // 月卡属性只能由"购买月卡→支付成功"链路授予，绑定时一律重置为普通私家车
+        vehicle.setType(0);
+        vehicle.setMonthlyExpire(null);
+
         // 检查车牌是否已绑定
         String encryptedPlate = AesUtils.encrypt(vehicle.getPlateNo());
         Long count = this.count(new LambdaQueryWrapper<Vehicle>()
@@ -87,21 +103,35 @@ public class VehicleServiceImpl extends ServiceImpl<VehicleMapper, Vehicle> impl
     }
 
     @Override
-    public void unbindVehicle(Long vehicleId, Long userId) {
+    public void unbindVehicle(Long vehicleId, Long currentUserId) {
         Vehicle vehicle = this.getById(vehicleId);
         if (vehicle == null) {
             throw new BizException(ErrorCode.VEHICLE_NOT_FOUND);
         }
         // 业主只能解绑自己的车；管理员/超管可解绑任意车辆
         boolean isAdmin = isAdminOperator();
-        if (!isAdmin && !vehicle.getOwnerId().equals(userId)) {
+        if (!isAdmin && (currentUserId == null || !currentUserId.equals(vehicle.getOwnerId()))) {
             throw new BizException(ErrorCode.FORBIDDEN, "无权操作此车辆");
         }
         this.removeById(vehicleId);
 
         // 操作审计：解绑车辆
-        auditClient.record(userId, null, "解绑车辆", "DELETE /api/vehicle/unbind/{id}",
+        auditClient.record(currentUserId, null, "解绑车辆", "DELETE /api/vehicle/unbind/{id}",
                 "{\"vehicleId\":" + vehicleId + "}", true);
+    }
+
+    /**
+     * 解析网关注入的用户ID，非法/缺失返回 null（不抛异常，交由调用方判定）
+     */
+    private Long parseUserId(String rawUserId) {
+        if (!StringUtils.hasText(rawUserId)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(rawUserId.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

@@ -40,7 +40,7 @@ public class OrderMessageConsumer {
     @Value("${smart-parking.vehicle-url:http://localhost:8083}")
     private String vehicleUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate());
 
     @RabbitListener(queues = RabbitMQConfig.NOTIFY_QUEUE)
     public void handleOrderMessage(Message message, Channel channel) throws IOException {

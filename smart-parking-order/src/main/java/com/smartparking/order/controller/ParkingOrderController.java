@@ -53,7 +53,15 @@ public class ParkingOrderController {
 
     @Operation(summary = "车辆出场，完成订单")
     @PostMapping("/exit/{orderNo}")
-    public Result<ParkingOrder> exit(@PathVariable String orderNo) {
+    public Result<ParkingOrder> exit(@PathVariable String orderNo,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 报告 P1-6：出场会结算金额并释放车位，业主只能操作自己车辆的订单
+        ParkingOrder exist = parkingOrderService.getByOrderNo(orderNo);
+        if (exist == null) {
+            return Result.fail(ErrorCode.ORDER_NOT_FOUND);
+        }
+        assertOrderReadable(exist, currentUserId, currentRole);
         ParkingOrder order = parkingOrderService.completeOrder(orderNo);
         return Result.success(order);
     }
@@ -106,7 +114,16 @@ public class ParkingOrderController {
     @Operation(summary = "获取当前停车中的订单")
     @GetMapping("/current")
     public Result<ParkingOrder> current(
-            @Parameter(description = "车辆ID") @RequestParam Long vehicleId) {
+            @Parameter(description = "车辆ID") @RequestParam Long vehicleId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 业主只能查自己名下车辆的在场订单（报告 P1-6：此前传任意 vehicleId 即可探测他人停车情况）
+        if ("0".equals(currentRole) && currentUserId != null) {
+            java.util.List<Long> ownerVehicleIds = vehicleClient.listVehicleIdsByOwner(Long.valueOf(currentUserId));
+            if (!ownerVehicleIds.contains(vehicleId)) {
+                throw new BizException(ErrorCode.FORBIDDEN, "无权查看该车辆订单");
+            }
+        }
         ParkingOrder order = parkingOrderService.getCurrentOrder(vehicleId);
         return Result.success(order);
     }
@@ -129,7 +146,15 @@ public class ParkingOrderController {
 
     @Operation(summary = "取消订单")
     @PostMapping("/cancel/{orderNo}")
-    public Result<Void> cancel(@PathVariable String orderNo) {
+    public Result<Void> cancel(@PathVariable String orderNo,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 报告 P1-6：取消会释放车位，业主只能取消自己车辆的订单
+        ParkingOrder exist = parkingOrderService.getByOrderNo(orderNo);
+        if (exist == null) {
+            return Result.fail(ErrorCode.ORDER_NOT_FOUND);
+        }
+        assertOrderReadable(exist, currentUserId, currentRole);
         parkingOrderService.cancelOrder(orderNo);
         return Result.success();
     }

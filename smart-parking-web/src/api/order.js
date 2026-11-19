@@ -25,6 +25,30 @@ export function getBillingRules() {
   })
 }
 
+// 计费规则写操作（管理端）：单价/封顶直接决定应收金额，网关仅放行角色 1/2
+export function createBillingRule(data) {
+  return request({
+    url: '/order/billing-rules',
+    method: 'post',
+    data
+  })
+}
+
+export function updateBillingRule(id, data) {
+  return request({
+    url: `/order/billing-rules/${id}`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteBillingRule(id) {
+  return request({
+    url: `/order/billing-rules/${id}`,
+    method: 'delete'
+  })
+}
+
 // 车辆出场，完成订单
 export function exitOrder(orderNo) {
   return request({

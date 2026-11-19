@@ -22,7 +22,7 @@ public class ParkingSpaceClient {
                 new org.springframework.http.client.SimpleClientHttpRequestFactory();
         f.setConnectTimeout(3000);
         f.setReadTimeout(5000);
-        return new RestTemplate(f);
+        return com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate(f));
     }
 
     /**

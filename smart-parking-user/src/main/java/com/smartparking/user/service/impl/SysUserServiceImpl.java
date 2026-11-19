@@ -14,15 +14,15 @@ import com.smartparking.user.mapper.SysUserMapper;
 import com.smartparking.user.monitor.UserAuthMetrics;
 import com.smartparking.user.po.SysUser;
 import com.smartparking.user.query.SysUserQuery;
+import com.smartparking.user.security.PasswordCrypto;
 import com.smartparking.user.service.AuditLogService;
 import com.smartparking.user.service.SysUserService;
 import com.smartparking.user.vo.UserVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +30,7 @@ import java.util.Map;
 /**
  * 用户服务实现
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements SysUserService {
@@ -55,8 +56,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
         SysUser user = new SysUser();
         user.setUsername(dto.getUsername());
-        // 密码加密（BCrypt）
-        user.setPassword(passwordEncode(dto.getPassword()));
+        // 密码加密（真 BCrypt，含随机盐）
+        user.setPassword(PasswordCrypto.encode(dto.getPassword()));
         // 手机号加密存储
         if (StringUtils.hasText(dto.getPhone())) {
             user.setPhone(AesUtils.encrypt(dto.getPhone()));
@@ -97,8 +98,22 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             if (user.getStatus() == 0) {
                 throw new BizException(ErrorCode.USER_DISABLED);
             }
-            if (!passwordMatches(password, user.getPassword())) {
+            if (!PasswordCrypto.matches(password, user.getPassword())) {
                 throw new BizException(ErrorCode.LOGIN_FAILED);
+            }
+
+            // 存量「伪 BCrypt」（$2a$10$+MD5，无盐）校验通过后立即升级为真 BCrypt。
+            // 用户无感知，且升级失败不影响本次登录（下次登录会再试）。
+            if (PasswordCrypto.isLegacy(user.getPassword())) {
+                try {
+                    SysUser upgrade = new SysUser();
+                    upgrade.setId(user.getId());
+                    upgrade.setPassword(PasswordCrypto.encode(password));
+                    this.updateById(upgrade);
+                    log.info("用户 {} 的密码哈希已升级为 BCrypt", user.getUsername());
+                } catch (Exception e) {
+                    log.warn("密码哈希升级失败 username={}, err={}", user.getUsername(), e.getMessage());
+                }
             }
 
             auditLogService.record(user.getId(), user.getUsername(), "登录", "POST /api/user/login",
@@ -224,19 +239,5 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                         .eq(SysUser::getStatus, 1)
                         .select(SysUser::getId))
                 .stream().map(SysUser::getId).toList();
-    }
-
-    /**
-     * 密码加密（模拟BCrypt，生产环境使用BCryptPasswordEncoder）
-     */
-    private String passwordEncode(String rawPassword) {
-        return "$2a$10$" + DigestUtils.md5DigestAsHex(rawPassword.getBytes(StandardCharsets.UTF_8));
-    }
-
-    /**
-     * 密码校验
-     */
-    private boolean passwordMatches(String rawPassword, String encodedPassword) {
-        return passwordEncode(rawPassword).equals(encodedPassword);
     }
 }

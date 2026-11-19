@@ -27,9 +27,18 @@ public class VisitorInviteController {
     @Operation(summary = "业主生成访客邀请码")
     @PostMapping("/create")
     public Result<VisitorInvite> create(
-            @Parameter(description = "邀请业主ID") @RequestParam Long userId,
+            @Parameter(description = "邀请业主ID（业主传值无效，服务端强制取登录人）") @RequestParam(required = false) Long userId,
             @Parameter(description = "访客车牌号") @RequestParam String plateNo,
-            @Parameter(description = "有效期（小时，默认24）") @RequestParam(required = false, defaultValue = "24") Integer expireHours) {
+            @Parameter(description = "有效期（小时，默认24）") @RequestParam(required = false, defaultValue = "24") Integer expireHours,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 报告 P1-6：原实现信任 body/param 的 userId，可替他人生成邀请并让费用挂到别人账上
+        if ("0".equals(currentRole) && currentUserId != null) {
+            userId = Long.valueOf(currentUserId);
+        }
+        if (userId == null) {
+            userId = currentUserId == null ? null : Long.valueOf(currentUserId);
+        }
         VisitorInvite invite = visitorInviteService.createInvite(userId, plateNo, expireHours);
         return Result.success(invite);
     }
@@ -57,10 +66,17 @@ public class VisitorInviteController {
         return Result.success(order);
     }
 
-    @Operation(summary = "访客车牌自动识别入场（白名单，供门岗/设备人工核验）")
+    @Operation(summary = "访客车牌自动识别入场（门岗/设备专用，仅管理端）")
     @PostMapping("/entry-by-plate")
     public Result<ParkingOrder> entryByPlate(
-            @Parameter(description = "访客车牌号") @RequestParam String plateNo) {
+            @Parameter(description = "访客车牌号") @RequestParam String plateNo,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 报告 P1-6：该接口会真实放行车辆，任何登录用户都能调等于"任意车牌免费入场"。
+        // 访客自助入场请走 /entry（凭邀请码），设备侧走 /api/order/internal/device-entry。
+        if (!"1".equals(currentRole) && !"2".equals(currentRole)) {
+            return Result.fail(com.smartparking.common.core.exception.ErrorCode.FORBIDDEN,
+                    "仅门岗/管理端可使用车牌放行，访客请凭邀请码入场");
+        }
         ParkingOrder order = visitorInviteService.entryByPlateNo(plateNo);
         return Result.success(order);
     }
@@ -69,8 +85,9 @@ public class VisitorInviteController {
     @PostMapping("/invalidate")
     public Result<Void> invalidate(
             @Parameter(description = "邀请ID") @RequestParam Long id,
-            @Parameter(description = "操作人ID") @RequestParam Long userId) {
-        visitorInviteService.invalidate(id, userId);
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId) {
+        // 归属判断用网关注入的登录人，不再信任请求参数（否则传别人的 userId 即可作废他人邀请）
+        visitorInviteService.invalidate(id, currentUserId == null ? null : Long.valueOf(currentUserId));
         return Result.success();
     }
 }

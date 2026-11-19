@@ -69,6 +69,8 @@ class ParkingOrderControllerTest {
     void exit_completesOrder() throws Exception {
         ParkingOrder order = new ParkingOrder();
         order.setOrderNo("P202610130001");
+        // P1-6 起 exit 先取订单做归属校验，再结算
+        when(parkingOrderService.getByOrderNo("P202610130001")).thenReturn(order);
         when(parkingOrderService.completeOrder("P202610130001")).thenReturn(order);
 
         mockMvc.perform(post("/api/order/exit/P202610130001"))

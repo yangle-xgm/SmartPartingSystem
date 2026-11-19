@@ -238,6 +238,21 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
         }
 
         wrapper.orderByDesc(ParkingOrder::getCreateTime);
+
+        // 关键字检索下沉到 SQL（报告 P2-12）：只过滤当前页会误导成"查无此单"
+        String keyword = query.getKeyword();
+        if (StringUtils.hasText(keyword)) {
+            String k = keyword.trim();
+            String encryptedPlate = k.length() >= 6 ? AesUtils.encrypt(k) : null;
+            wrapper.and(w -> {
+                w.like(ParkingOrder::getOrderNo, k)
+                        .or().like(ParkingOrder::getSpaceNo, k);
+                if (encryptedPlate != null) {
+                    w.or().eq(ParkingOrder::getPlateNo, encryptedPlate);
+                }
+            });
+        }
+
         Page<ParkingOrder> result = this.page(page, wrapper);
         // 车牌解密后返回前端展示（E2E 报告 P0-4：原方法引用 forEach(ParkingOrderServiceImpl::decryptPlateNo)
         // 把 String 返回值当 Consumer 丢弃，对象密文未被替换）
@@ -325,10 +340,23 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             throw new BizException(ErrorCode.PAY_AMOUNT_INVALID, "支付金额与结算金额不一致");
         }
 
-        order.setPayStatus(Constants.PAY_STATUS_PAID);
-        order.setPayTime(LocalDateTime.now());
-        order.setAmount(serverAmount);
-        this.updateById(order);
+        // 条件更新防 lost-update（报告 P1-8）：并发「支付回调」与「退款回调」同时到达时，
+        // 无条件 updateById 会让后写入者把已退款覆盖回已支付；改成只允许 0/3/4 → 1 的状态迁移。
+        boolean updated = this.update(new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ParkingOrder>()
+                .eq(ParkingOrder::getId, orderId)
+                .in(ParkingOrder::getPayStatus, Constants.PAY_STATUS_UNPAID,
+                        Constants.PAY_STATUS_CLOSED, Constants.PAY_STATUS_FAILED)
+                .set(ParkingOrder::getPayStatus, Constants.PAY_STATUS_PAID)
+                .set(ParkingOrder::getPayTime, LocalDateTime.now())
+                .set(ParkingOrder::getAmount, serverAmount));
+        if (!updated) {
+            // 并发下已被别的事务改过状态：重新判定，已支付视为幂等成功，其余拒绝
+            ParkingOrder latest = this.getById(orderId);
+            if (latest != null && Constants.PAY_STATUS_PAID == latest.getPayStatus()) {
+                return;
+            }
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "订单支付状态已变更，请刷新后重试");
+        }
     }
 
     /**
@@ -340,9 +368,17 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
      * 3. 如果设置了每日封顶，则不超过封顶金额
      */
     private BigDecimal calculateBillingAmount(ParkingOrder order, long totalMinutes) {
+        // 报告 P2-7：原实现规则缺失时 `return BigDecimal.ZERO` —— 计费规则被删（外键 SET NULL）
+        // 或被误删后，该订单直接按 0 元出场，等于静默免费放行，属资损。改为显式报错：
+        // 宁可结算失败让门岗走「人工放行」旁路并留痕，也不能把应收算成 0。
+        if (order.getBillingRuleId() == null) {
+            throw new BizException(ErrorCode.ORDER_BILLING_RULE_MISSING,
+                    "订单缺少计费规则，无法结算（可由门岗走人工放行并事后补录）");
+        }
         BillingRule rule = billingRuleService.getById(order.getBillingRuleId());
         if (rule == null) {
-            return BigDecimal.ZERO;
+            throw new BizException(ErrorCode.ORDER_BILLING_RULE_MISSING,
+                    "计费规则已不存在，无法结算（可由门岗走人工放行并事后补录）");
         }
 
         // 月租车（规则 vehicleType=2）：停在自己的固定车位 → 包月已含，应收 0 元；
@@ -366,48 +402,62 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
             // 月租车停非固定车位：继续走下方临停费率
         }
 
-        // 判断是否为周末（按入场日期）
-        boolean isWeekend = false;
-        if (order.getEntryTime() != null) {
-            java.time.DayOfWeek dow = order.getEntryTime().getDayOfWeek();
-            isWeekend = dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY;
-        }
-        BigDecimal unitPrice = isWeekend && rule.getWeekendUnitPrice() != null ? rule.getWeekendUnitPrice() : rule.getUnitPrice();
-        BigDecimal dailyCap = isWeekend && rule.getWeekendDailyCap() != null ? rule.getWeekendDailyCap() : rule.getDailyCap();
-
-        // 扣除免费时长
-        long billableMinutes = totalMinutes - rule.getFreeMinutes();
-        if (billableMinutes <= 0) {
-            return BigDecimal.ZERO;
+        // 免费时长内不计费
+        if (totalMinutes <= rule.getFreeMinutes()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
-        // 计算计费单位数（向上取整）
-        long units = (long) Math.ceil((double) billableMinutes / rule.getUnitDuration());
+        // 日封顶口径 = **自然日**（00:00 分界），逐日切段累计，每日金额取「当日封顶」的较小值。
+        // 报告 P1-10 原实现按「入场时刻起 24h 滚动块」：停 24h30m、日费 117.5、封顶 200 会被收 200。
+        // 改为自然日后，跨日订单在 0 点重新起算当日额度，符合业主对「日封顶」的直觉（也是物业合同口径）。
+        LocalDateTime cursor = order.getEntryTime() != null ? order.getEntryTime() : LocalDateTime.now();
+        BigDecimal total = BigDecimal.ZERO;
+        long remaining = totalMinutes;
+        long freeLeft = rule.getFreeMinutes() == null ? 0 : rule.getFreeMinutes();
+        // 未满一个计费单位的余数分钟跨段结转，避免「按日分段」在每个 0 点边界各多收一个单位
+        long carryMinutes = 0;
 
-        // 计算总费用
-        BigDecimal totalAmount = unitPrice.multiply(BigDecimal.valueOf(units));
+        while (remaining > 0) {
+            LocalDateTime dayEnd = cursor.toLocalDate().plusDays(1).atStartOfDay();
+            long toDayEnd = java.time.Duration.between(cursor, dayEnd).toMinutes();
+            long segMinutes = Math.min(remaining, Math.max(1, toDayEnd));
 
-        // 检查每日封顶
-        if (dailyCap != null) {
-            long days = totalMinutes / (24 * 60);
-            long remainingMinutes = totalMinutes % (24 * 60);
-
-            if (days > 0) {
-                BigDecimal dayAmount = dailyCap.multiply(BigDecimal.valueOf(days));
-                long remainingBillable = remainingMinutes - rule.getFreeMinutes();
-                if (remainingBillable > 0) {
-                    long remainingUnits = (long) Math.ceil((double) remainingBillable / rule.getUnitDuration());
-                    BigDecimal remainingAmount = unitPrice.multiply(BigDecimal.valueOf(remainingUnits));
-                    totalAmount = dayAmount.add(remainingAmount.min(dailyCap));
-                } else {
-                    totalAmount = dayAmount;
-                }
+            long segBillable = segMinutes;
+            if (freeLeft > 0) {
+                long used = Math.min(freeLeft, segBillable);
+                segBillable -= used;
+                freeLeft -= used;
             }
+            remaining -= segMinutes;
 
-            totalAmount = totalAmount.min(dailyCap.multiply(BigDecimal.valueOf(Math.max(days + 1, 1))));
+            if (segBillable > 0) {
+                // 费率按「该段所在自然日」判定周末：周六入场周一出场不会被整单按周末价收
+                java.time.DayOfWeek dow = cursor.getDayOfWeek();
+                boolean weekend = dow == java.time.DayOfWeek.SATURDAY || dow == java.time.DayOfWeek.SUNDAY;
+                BigDecimal segPrice = weekend && rule.getWeekendUnitPrice() != null
+                        ? rule.getWeekendUnitPrice() : rule.getUnitPrice();
+                BigDecimal segCap = weekend && rule.getWeekendDailyCap() != null
+                        ? rule.getWeekendDailyCap() : rule.getDailyCap();
+
+                long pool = carryMinutes + segBillable;
+                long units = pool / rule.getUnitDuration();
+                carryMinutes = pool % rule.getUnitDuration();
+                if (remaining <= 0 && carryMinutes > 0) {
+                    // 最后一段不足一个单位也按一个单位收（与「不足一个计费单位按一个单位」口径一致）
+                    units++;
+                    carryMinutes = 0;
+                }
+                BigDecimal segAmount = segPrice.multiply(BigDecimal.valueOf(units));
+                if (segCap != null) {
+                    // 当日封顶只作用于当日金额，超出部分不再向后结转
+                    segAmount = segAmount.min(segCap);
+                }
+                total = total.add(segAmount);
+            }
+            cursor = cursor.plusMinutes(segMinutes);
         }
 
-        return totalAmount.setScale(2, RoundingMode.HALF_UP);
+        return total.setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -458,11 +508,27 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
         if (Constants.PAY_STATUS_PAID != order.getPayStatus()) {
             throw new BizException(ErrorCode.PAY_STATUS_ERROR, "只有已支付订单才能退款");
         }
-        // 退款后订单支付状态置为已退款，禁止再次支付
-        order.setPayStatus(Constants.PAY_STATUS_REFUNDED);
-        order.setPayTime(null);
-        this.updateById(order);
+        // 退款后订单支付状态置为已退款，禁止再次支付。
+        // 条件更新（pay_status=1）避免与并发支付回调互相覆盖（报告 P1-8）
+        boolean updated = this.update(new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ParkingOrder>()
+                .eq(ParkingOrder::getId, orderId)
+                .eq(ParkingOrder::getPayStatus, Constants.PAY_STATUS_PAID)
+                .set(ParkingOrder::getPayStatus, Constants.PAY_STATUS_REFUNDED)
+                .set(ParkingOrder::getPayTime, null));
+        if (!updated) {
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "订单支付状态已变更，退款未生效");
+        }
         log.info("订单 {} 已退款，支付状态置为已退款", order.getOrderNo());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean markPaymentClosed(Long orderId) {
+        return this.update(new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ParkingOrder>()
+                .eq(ParkingOrder::getId, orderId)
+                .eq(ParkingOrder::getStatus, Constants.ORDER_STATUS_COMPLETED)
+                .eq(ParkingOrder::getPayStatus, Constants.PAY_STATUS_UNPAID)
+                .set(ParkingOrder::getPayStatus, Constants.PAY_STATUS_CLOSED));
     }
 
     @Override
@@ -478,7 +544,18 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
         info.put("spaceNo", order.getSpaceNo());
         info.put("vehicleId", order.getVehicleId());
         info.put("plateNo", decryptPlateNo(order));
-        info.put("userId", order.getVehicleId()); // 订单表无 user_id，归属以车辆所属业主为准
+        // 订单表没有 user_id，归属只能由车辆反查（报告 P2-9：原实现直接填 vehicleId，
+        // 下游拿到的是"车辆ID当用户ID"，任何按 userId 判断归属的逻辑都会失真）
+        Long ownerId = null;
+        try {
+            Map<String, Object> vehicleInfo = vehicleClient.getByPlateNo(decryptPlateNo(order));
+            if (vehicleInfo.get("ownerId") != null) {
+                ownerId = Long.valueOf(String.valueOf(vehicleInfo.get("ownerId")));
+            }
+        } catch (Exception e) {
+            log.warn("订单 {} 反查车主失败：{}", order.getOrderNo(), e.getMessage());
+        }
+        info.put("userId", ownerId);
         info.put("status", order.getStatus());
         info.put("payStatus", order.getPayStatus());
         info.put("amount", order.getAmount());
@@ -599,6 +676,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
      * 设备联动出场：出口摄像头识别车牌 → 自动结算 → 释放车位
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> deviceExit(String plateNo, String deviceNo) {
         Map<String, Object> result = new HashMap<>();
         result.put("success", false);
@@ -616,7 +694,17 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
                         .last("LIMIT 1"));
             }
             if (order == null) {
-                result.put("message", "未找到该车牌的进行中订单，无需出场结算");
+                // 报告 P1-11「有出无进」：此时道闸必须保持关闭，否则无单车辆可免费出场。
+                // 但不能只返回一句失败就结束 —— 现场需要"人工放行"这条旁路，且必须留痕。
+                // 旁路复用已有的管理端接口 POST /api/device/gate/open（网关已限定 role 1/2），
+                // 此处只负责把"该走哪条旁路"显式告诉调用方，并写审计，便于事后追责。
+                result.put("needManualRelease", true);
+                result.put("manualReleaseApi", "POST /api/device/gate/open?deviceNo=" + deviceNo);
+                result.put("message", "未找到该车牌的进行中订单，道闸保持关闭；"
+                        + "如属特殊情况需放行，请由管理端调用道闸手动开启接口（需 role=1/2）");
+                auditClient.record(null, null, "设备出场未匹配订单", "POST /api/order/internal/device-exit",
+                        java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "deviceNo", deviceNo,
+                                "needManualRelease", true), false);
                 return result;
             }
             ParkingOrder completed = completeOrder(order.getOrderNo());

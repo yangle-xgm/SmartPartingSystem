@@ -21,4 +21,8 @@ public class ParkingOrderQuery extends PageQuery {
 
     @Schema(description = "车辆ID列表（逗号分隔，业主查自己的订单）")
     private String vehicleIds;
+
+    /** 关键字：订单号 / 车位号模糊匹配；传完整车牌时按密文等值匹配（报告 P2-12：原先只过滤当前页，跨页搜不到） */
+    @Schema(description = "关键字（订单号/车位号/完整车牌）")
+    private String keyword;
 }

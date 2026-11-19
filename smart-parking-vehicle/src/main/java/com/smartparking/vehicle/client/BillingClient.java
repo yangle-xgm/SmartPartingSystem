@@ -44,7 +44,7 @@ public class BillingClient {
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
         f.setReadTimeout(3000);
-        this.restTemplate = new RestTemplate(f);
+        this.restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate(f));
     }
 
     private record CachedPrice(BigDecimal price, long at) {

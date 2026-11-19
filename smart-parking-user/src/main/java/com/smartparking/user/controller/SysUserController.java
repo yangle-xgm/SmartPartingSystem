@@ -52,7 +52,7 @@ public class SysUserController {
 
     @Operation(summary = "用户注册")
     @PostMapping("/register")
-    public Result<UserVO> register(@RequestBody RegisterDTO dto) {
+    public Result<UserVO> register(@jakarta.validation.Valid @RequestBody RegisterDTO dto) {
         return Result.success(sysUserService.register(dto));
     }
 

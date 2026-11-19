@@ -30,7 +30,7 @@ public class AuditClient {
         SimpleClientHttpRequestFactory f = new SimpleClientHttpRequestFactory();
         f.setConnectTimeout(2000);
         f.setReadTimeout(2000);
-        this.restTemplate = new RestTemplate(f);
+        this.restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate(f));
     }
 
     /** 审计发送线程池：异步发送，避免拖慢入场/出场等主流程 */

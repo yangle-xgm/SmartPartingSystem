@@ -43,6 +43,16 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
     private final BillingClient billingClient;
     private final AuditClient auditClient;
 
+    /**
+     * 模拟支付开关（与 payment 模块同名键，一处关闭所有 mock 通道）。
+     *
+     * <p>{@code pay()} 是自助充值入口：默认 true 时业主点一下就白拿月卡，属于「演示用免费通道」，
+     * 只能在毕设/联调环境开启。接入真实收银台后置 false，该端点会直接拒绝，
+     * 业主必须走真实支付渠道回调才会延期。</p>
+     */
+    @org.springframework.beans.factory.annotation.Value("${smart-parking.payment.mock-enabled:true}")
+    private boolean mockPayEnabled;
+
     /** 允许购买的月数档位 */
     private static final Set<Integer> ALLOWED_MONTHS = Set.of(1, 3, 6, 12);
 
@@ -106,6 +116,10 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> pay(String orderNo, Long currentUserId, String currentRole) {
+        if (!mockPayEnabled) {
+            throw new BizException(ErrorCode.PARAM_INVALID,
+                    "当前环境已启用真实支付渠道，请通过收银台完成支付后再查询结果");
+        }
         MonthlyCardOrder order = orderMapper.selectOne(new LambdaQueryWrapper<MonthlyCardOrder>()
                 .eq(MonthlyCardOrder::getOrderNo, orderNo)
                 .last("LIMIT 1"));

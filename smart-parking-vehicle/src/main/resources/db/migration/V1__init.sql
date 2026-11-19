@@ -3,7 +3,7 @@
 -- 跨模块物理外键保留；依赖 smart-parking-user 先迁移（无外部 FK 依赖）。
 -- ============================================================
 
-CREATE TABLE `vehicle` (
+CREATE TABLE IF NOT EXISTS `vehicle` (
   `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
   `plate_no` VARCHAR(128) NOT NULL COMMENT '车牌号（AES加密存储）',
   `plate_color` VARCHAR(10) DEFAULT '蓝' COMMENT '车牌颜色（蓝/绿/黄）',

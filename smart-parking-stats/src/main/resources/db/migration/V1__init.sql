@@ -3,7 +3,7 @@
 -- 跨模块物理外键保留；依赖 smart-parking-user 先迁移（无外部 FK 依赖）。
 -- ============================================================
 
-CREATE TABLE `parking_stats` (
+CREATE TABLE IF NOT EXISTS `parking_stats` (
   `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
   `stat_date` DATE NOT NULL COMMENT '统计日期',
   `area` VARCHAR(50) DEFAULT NULL COMMENT '区域',

@@ -132,15 +132,17 @@ CREATE TABLE `parking_order` (
   `duration` INT UNSIGNED DEFAULT NULL COMMENT '停车时长（分钟）',
   `billing_rule_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '计费规则ID',
   `amount` DECIMAL(10,2) UNSIGNED DEFAULT NULL COMMENT '应付金额',
-  `pay_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支付状态（0未支付 1已支付 2已退款）',
+  `pay_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支付状态（0未支付 1已支付 2已退款 3已关闭-超时未付 4支付失败）',
   `pay_time` DATETIME DEFAULT NULL COMMENT '支付时间',
   `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '订单状态（0进行中 1已完成 2已取消）',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
   `alive_order_no` VARCHAR(191) GENERATED ALWAYS AS (IF(`is_deleted` = 0, `order_no`, NULL)) STORED COMMENT '仅未删除行有值（D4）',
+  `alive_vehicle_ongoing` BIGINT UNSIGNED GENERATED ALWAYS AS (IF(`is_deleted` = 0 AND `status` = 0, `vehicle_id`, NULL)) VIRTUAL COMMENT '仅进行中且未删除的行有值（单车一笔进行中订单）',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_order_no_alive` (`alive_order_no`),
+  UNIQUE KEY `uk_vehicle_ongoing` (`alive_vehicle_ongoing`),
   KEY `idx_vehicle_id` (`vehicle_id`),
   KEY `idx_plate_no` (`plate_no`),
   KEY `idx_space_id` (`space_id`),
@@ -163,7 +165,7 @@ CREATE TABLE `payment_record` (
   `user_id` BIGINT UNSIGNED NOT NULL COMMENT '支付用户ID',
   `amount` DECIMAL(10,2) UNSIGNED NOT NULL COMMENT '支付金额',
   `pay_type` TINYINT UNSIGNED NOT NULL COMMENT '支付方式（1微信 2支付宝 3现金）',
-  `pay_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支付状态（0待支付 1成功 2失败 3退款）',
+  `pay_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支付状态（0待支付 1成功 2已退款 3已关闭-超时未付 4失败）',
   `transaction_id` VARCHAR(64) DEFAULT NULL COMMENT '第三方交易号',
   `pay_time` DATETIME DEFAULT NULL COMMENT '支付时间',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -174,6 +176,7 @@ CREATE TABLE `payment_record` (
   UNIQUE KEY `uk_pay_no_alive` (`alive_pay_no`),
   KEY `idx_order_id` (`order_id`),
   KEY `idx_user_id` (`user_id`),
+  KEY `idx_pay_time` (`pay_time`),
   CONSTRAINT `fk_payment_order` FOREIGN KEY (`order_id`) REFERENCES `parking_order` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_payment_user` FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='支付记录表';
@@ -189,6 +192,7 @@ CREATE TABLE `device` (
   `device_type` TINYINT UNSIGNED NOT NULL COMMENT '设备类型（1道闸 2摄像头 3地磁 4显示屏）',
   `location` VARCHAR(100) NOT NULL COMMENT '安装位置',
   `mqtt_topic` VARCHAR(100) DEFAULT NULL COMMENT 'MQTT通信主题',
+  `vendor` VARCHAR(32) NOT NULL DEFAULT 'sandbox' COMMENT '接入厂商通道（sandbox 沙箱 / mqtt-plain 通用MQTT / 厂商码）',
   `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态（0离线 1在线 2故障）',
   `last_heartbeat` DATETIME DEFAULT NULL COMMENT '最后心跳时间',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -311,7 +315,9 @@ CREATE TABLE reservation (
   end_time DATETIME NOT NULL,
   status TINYINT DEFAULT 0 COMMENT '0已预约 1已入场 2已过期 3已取消',
   create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_space_time (space_id, start_time, end_time),
+  KEY idx_user_status (user_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE share_income (
@@ -323,8 +329,32 @@ CREATE TABLE share_income (
   owner_ratio DECIMAL(3,2) DEFAULT 0.70,
   owner_amount DECIMAL(10,2) NOT NULL,
   property_amount DECIMAL(10,2) NOT NULL,
-  create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_payment_id (payment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE invoice (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  invoice_no VARCHAR(32) COMMENT '发票号（开票时生成）',
+  order_id BIGINT NOT NULL COMMENT '停车订单ID',
+  payment_id BIGINT COMMENT '支付流水ID',
+  user_id BIGINT NOT NULL COMMENT '申请人',
+  title_type TINYINT DEFAULT 1 COMMENT '1个人 2企业',
+  title VARCHAR(100) NOT NULL COMMENT '发票抬头',
+  tax_no VARCHAR(30) COMMENT '纳税人识别号（企业必填）',
+  email VARCHAR(100) COMMENT '接收邮箱',
+  amount DECIMAL(10,2) NOT NULL COMMENT '开票金额',
+  status TINYINT DEFAULT 0 COMMENT '0待开票 1已开票 2已红冲',
+  remark VARCHAR(255),
+  apply_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  issue_time DATETIME,
+  create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  is_deleted TINYINT DEFAULT 0,
+  UNIQUE KEY uk_order_id (order_id),
+  KEY idx_user_time (user_id, apply_time),
+  KEY idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='电子发票申请表';
 
 CREATE TABLE feedback (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -354,3 +384,36 @@ CREATE TABLE community (
 -- 车位与用户关联小区
 ALTER TABLE parking_space ADD COLUMN community_id BIGINT DEFAULT 1;
 ALTER TABLE sys_user ADD COLUMN community_id BIGINT DEFAULT 1;
+ALTER TABLE parking_space ADD KEY idx_community (community_id);
+ALTER TABLE sys_user ADD KEY idx_community (community_id);
+
+-- ============================================================
+-- 月卡订单表（与 Flyway V4__monthly_card_order.sql 保持一致）
+-- 报告 P1-15：该表原先只存在于 Flyway 迁移，按 README 用 init.sql 建库时月卡功能启动即报表不存在
+-- ============================================================
+DROP TABLE IF EXISTS `monthly_card_order`;
+CREATE TABLE `monthly_card_order` (
+  `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
+  `order_no` VARCHAR(32) NOT NULL COMMENT '月卡订单号（MC+yyyyMMddHHmmss+6位随机）',
+  `user_id` BIGINT UNSIGNED NOT NULL COMMENT '业主ID',
+  `vehicle_id` BIGINT UNSIGNED NOT NULL COMMENT '车辆ID',
+  `plate_no` VARCHAR(128) NOT NULL COMMENT '车牌（AES 密文，与 vehicle.plate_no 同源）',
+  `months` TINYINT UNSIGNED NOT NULL COMMENT '购买月数（1/3/6/12）',
+  `unit_price` DECIMAL(10,2) UNSIGNED NOT NULL COMMENT '下单时月单价快照',
+  `amount` DECIMAL(10,2) UNSIGNED NOT NULL COMMENT '订单金额 = unit_price * months',
+  `pay_type` TINYINT UNSIGNED DEFAULT NULL COMMENT '支付方式（1微信 2支付宝）',
+  `pay_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支付状态（0待支付 1成功 2失败 3已取消）',
+  `pay_no` VARCHAR(32) DEFAULT NULL COMMENT '支付流水号（模拟支付）',
+  `transaction_id` VARCHAR(64) DEFAULT NULL COMMENT '第三方交易号（模拟）',
+  `expire_before` DATETIME DEFAULT NULL COMMENT '支付前月卡到期时间',
+  `expire_after` DATETIME DEFAULT NULL COMMENT '支付后月卡到期时间',
+  `pay_time` DATETIME DEFAULT NULL COMMENT '支付完成时间',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否删除（0未删除 1已删除）',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_monthly_order_no` (`order_no`),
+  KEY `idx_monthly_user` (`user_id`),
+  KEY `idx_monthly_vehicle` (`vehicle_id`),
+  KEY `idx_monthly_pay_no` (`pay_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='月卡订单表';

@@ -3,7 +3,7 @@
 -- 跨模块物理外键保留；依赖 smart-parking-user 先迁移（无外部 FK 依赖）。
 -- ============================================================
 
-CREATE TABLE `parking_space` (
+CREATE TABLE IF NOT EXISTS `parking_space` (
   `id` BIGINT UNSIGNED NOT NULL COMMENT '主键',
   `space_no` VARCHAR(20) NOT NULL COMMENT '车位编号',
   `area` VARCHAR(50) NOT NULL COMMENT '所属区域（A区/B区等）',
@@ -23,9 +23,13 @@ CREATE TABLE `parking_space` (
   CONSTRAINT `fk_space_owner` FOREIGN KEY (`owner_id`) REFERENCES `sys_user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='车位表';
 
-ALTER TABLE parking_space ADD COLUMN community_id BIGINT DEFAULT 1;
+-- 幂等补列：表可能由 mapper/init.sql 预先建好（此时 community_id 已存在）
+SET @c := (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE() AND table_name = 'parking_space' AND column_name = 'community_id');
+SET @sql := IF(@c = 0, 'ALTER TABLE `parking_space` ADD COLUMN `community_id` BIGINT DEFAULT 1', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-CREATE TABLE reservation (
+CREATE TABLE IF NOT EXISTS reservation (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   space_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,

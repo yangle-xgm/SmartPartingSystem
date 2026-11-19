@@ -65,13 +65,18 @@ public class NotificationController {
         return template;
     }
 
-    @Operation(summary = "发送通知")
+    @Operation(summary = "发送通知（管理端；业主不可代发任意通知）")
     @PostMapping("/send")
     public Result<Void> send(
             @Parameter(description = "用户ID") @RequestParam Long userId,
             @Parameter(description = "标题") @RequestParam String title,
             @Parameter(description = "内容") @RequestParam String content,
-            @Parameter(description = "类型（1入场 2出场 3缴费提醒 4系统公告）") @RequestParam Integer type) {
+            @Parameter(description = "类型（1入场 2出场 3缴费提醒 4系统公告）") @RequestParam Integer type,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 报告 P1-6：原接口任何登录用户都能给任意 userId 发通知（钓鱼/骚扰入口）
+        if (!"1".equals(currentRole) && !"2".equals(currentRole)) {
+            return Result.fail(com.smartparking.common.core.exception.ErrorCode.FORBIDDEN, "仅管理端可发送通知");
+        }
         notificationService.sendNotification(userId, title, content, type);
         return Result.success();
     }

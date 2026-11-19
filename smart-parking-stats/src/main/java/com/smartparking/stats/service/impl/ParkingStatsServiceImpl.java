@@ -40,7 +40,7 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
     @Value("${smart-parking.parking-url:http://localhost:8082}")
     private String parkingUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = com.smartparking.common.core.http.InternalHttp.attach(new RestTemplate());
 
     private static final String DASHBOARD_KEY = "smart:parking:stats:dashboard";
     private static final String OCCUPANCY_KEY = "smart:parking:stats:occupancy";
