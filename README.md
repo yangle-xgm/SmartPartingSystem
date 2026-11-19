@@ -27,14 +27,18 @@ docker-compose up -d
 
 ### 2. 导入数据库
 
-在 Navicat 中执行以下脚本：
+**方式 A（推荐）：交给 Flyway 自动建库。** 只需保证 MySQL 里存在空的 `smart_parking` 库，启动服务时各模块会按自己的 `db/migration` 版本脚本建表 + 灌种子（幂等，可重复启动）。**必须按依赖顺序启动**，否则跨模块外键会失败：
 
-1. 先执行 `mapper/init.sql` - 创建库表结构
-2. 再执行 `mapper/data.sql` - 导入测试数据
+```
+user → parking → vehicle → order → payment
+（notify / device / stats 只依赖 user，可与 payment 并行）
+```
+
+**方式 B：手工导入。** 在 Navicat 中先执行 `mapper/init.sql`（创建库表结构）。注意 `mapper/init.sql` 只建表不灌种子，种子数据由各模块的 `V2__seed.sql` 负责，所以手工导入后也要正常启动服务让 Flyway 跑增量。
 
 ### 3. 启动 Nacos 配置
 
-访问 <http://localhost:8848/nacos，默认账号密码：nacos/nacos>
+访问 <http://localhost:8849/nacos，默认账号密码：nacos/nacos>
 
 ### 4. 编译项目
 
@@ -46,7 +50,21 @@ mvn clean install -DskipTests
 
 1. `smart-parking-gateway` - 网关服务 (8080)
 2. `smart-parking-user` - 用户服务 (8081)
-3. 其他微服务...
+3. 按上文依赖顺序启动其余微服务（parking 8082 → vehicle 8083 → order 8084 → payment 8085 → notify 8086 → device 8087 → stats 8088 → ai 8090）
+
+### 5.1 生产部署必须覆盖的密钥（重要）
+
+以下配置项都带**默认值以方便本地开发**，但生产环境必须用环境变量覆盖，否则等同没有防护：
+
+| 环境变量 | 作用 | 默认值 |
+| --- | --- | --- |
+| `SMART_PARKING_JWT_SECRET` | 网关 JWT 签名密钥 | 内置开发密钥 |
+| `SMART_PARKING_AES_KEY` | 车牌/手机号 AES 加密密钥 | 内置开发密钥 |
+| `SP_INTERNAL_TOKEN` | 服务间 `/internal/**` 调用令牌 | `SmartParking-Internal-2026` |
+| `smart-parking.payment.callback-secret` | 支付回调验签密钥，`sign = MD5(payNo + "&" + secret)` | `SmartParkingCallback2026` |
+| `smart-parking.payment.mock-enabled` | 模拟支付开关，接真实渠道后必须置 `false` | `true` |
+
+设 `smart-parking.strict-secrets=true` 可让服务在缺失上述密钥时**拒绝启动**（推荐用于生产）。
 
 ### 6. 启动前端
 
@@ -63,6 +81,47 @@ npm run dev
 ### 7. 访问 API 文档
 
 * Knife4j：<http://localhost:8081/doc.html>
+
+### 8. 手机 / 局域网访问（可选）
+
+手机与电脑在**同一网段**（同一 WiFi 或同一热点）时即可访问，无需改代码、无需端口映射。
+
+**只要做两件事：**
+
+1. **用电脑的局域网 IP，不要用 localhost**
+
+   ```bash
+   ipconfig            # 找 WLAN 的 IPv4 地址，例如 10.168.1.156
+   ```
+
+   手机浏览器打开 `http://<电脑IP>:3001`（H5）或 `http://<电脑IP>:3000`（管理端）。
+   手机上的 `localhost` 指向手机自己，一定打不开。
+
+2. **确认 Windows 防火墙放行 node 的入站**
+
+   首次 `npm run dev` 时系统会弹窗询问，选「允许访问」即可；若误点拒绝，去
+   *Windows 安全中心 → 防火墙 → 允许应用通过防火墙* 勾上 Node.js。
+   只放行 Node 占用的前端端口即可。
+
+**不需要放行的端口：**
+
+* 后端 8080 / 各微服务端口都不用向局域网开放。H5 请求 `/api/**` 由 vite 在**电脑侧**代理到
+  `127.0.0.1:8080`，手机全程只与前端端口通信。
+* 不需要 `netsh interface portproxy` 之类的端口映射，同一网段直连即可。
+
+**唯一需要留意的代码层：网关 CORS 白名单**
+
+浏览器对 POST 请求会带上 `Origin: http://<电脑IP>:3001`，网关的 `allowedOriginPatterns`
+必须包含该来源，否则会返回 **403 且响应体为空**，前端只能兜底提示「请求失败」。
+默认值已包含 `localhost` / `127.0.0.1` 与 `192.168.*` / `10.*` / `172.16.*` 私有网段；
+换网络环境时可用环境变量覆盖（逗号分隔）：
+
+```bash
+SP_CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://10.168.1.156:3001
+```
+
+> 若手机能连上 WiFi 却访问不到（`ping` 也不通），说明该网络做了客户端隔离（常见于校园网、
+> 酒店/公共 WiFi）。此时改用手机热点或内网穿透，与本项目代码无关。
 
 ## 项目结构
 
@@ -127,7 +186,9 @@ smart-parking-system/
 
 ## CI 门禁与 AI 原生 SDLC 规范
 
-本项目已落地 **AI 原生 SDLC（工件驱动闭环）** 的完整工程化骨架：规划(`docs/sdlc/intent.md`) → 设计(`spec.md`) → 构建(`AGENTS.md` + `plan.md`) → 测试(11 个单测 + 钩子) → 部署(`.github/workflows/ai-review.yml`) → 维护(`bands.yaml` 监控闭环)。
+本项目已落地 **AI 原生 SDLC（工件驱动闭环）** 的完整工程化骨架：规划(`docs/sdlc/intent.md`) → 设计(`spec.md`) → 构建(`AGENTS.md` + `plan.md`) → 测试(16 个模块 / 52 个测试类 / 198 个用例 + 钩子) → 部署(`.github/workflows/ai-review.yml`) → 维护(`bands.yaml` 监控闭环)。
+
+**第三方渠道**：支付宝走**真实沙箱**（官方 `alipay-sdk-java` + 沙箱网关，支持收银台支付/主动查询/原路退款/异步通知验签，切生产只换网关与密钥）；微信支付无公开沙箱，保持模拟通道。设备侧以 `GateAdapter` 抽象厂商协议，内置 `sandbox`（JSON 指令 + ACK 回执 + 虚拟道闸模拟器）与 `mqtt-plain` 两种通道，接入真实厂商只需新增一个适配器 Bean。详见 `docs/沙箱渠道接入-支付宝与设备-2026-11-19.md`。
 
 ### 1. 激活 GitHub CI 门禁（一次性）
 

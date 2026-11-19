@@ -90,7 +90,12 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
+            # 报告 P1-5：原为 allowedOriginPatterns: "*" 且 allowCredentials: true，
+            # 任何站点都能带着凭证跨域调全站接口。改为显式白名单，本地开发默认放行两个前端，
+            # 部署时用 SP_CORS_ORIGINS（逗号分隔）覆盖，切勿再写回 "*"。
+            # 追加私有网段通配：手机经热点(192.168.137.x)或校园网(10.x)访问前端时，浏览器会给
+            # POST 带上该来源的 Origin，不含则网关直接 403 空体（前端只能兜底成「请求失败」）。
+            allowedOriginPatterns: "${SP_CORS_ORIGINS:http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001,http://192.168.*:*,http://10.*:*,http://172.16.*:*}"
             allowedMethods: "*"
             allowedHeaders: "*"
             allowCredentials: true

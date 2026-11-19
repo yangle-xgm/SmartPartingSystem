@@ -25,8 +25,14 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
+        // 同 h5：手机用热点/局域网 IP 访问时，POST 会带局域网 Origin，
+        // 网关 globalcors 白名单不含该来源 → 403 空体 → 前端「请求失败」。
+        // 这一跳是服务端转发，摘掉 Origin 即可。
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'))
+        },
       },
     },
   },
