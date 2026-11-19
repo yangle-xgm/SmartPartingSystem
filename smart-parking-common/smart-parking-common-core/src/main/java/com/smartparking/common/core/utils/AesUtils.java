@@ -1,8 +1,6 @@
 package com.smartparking.common.core.utils;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -13,16 +11,41 @@ import java.util.Base64;
  */
 public class AesUtils {
 
-    /** AES密钥（生产环境应从配置中心读取，且定期轮换） */
-    private static final String AES_KEY = "SmartParkingAES256Key2026Secure!";
+    /** 内置开发默认密钥：生产必须通过 SMART_PARKING_AES_KEY / smart-parking.aes-key 注入 */
+    private static final String DEFAULT_AES_KEY = "SmartParkingAES256Key2026Secure!";
 
+    /** 运行期生效的密钥，由 SecuritySecretsConfig 在启动时覆盖 */
+    private static volatile String aesKey = DEFAULT_AES_KEY;
+
+    private AesUtils() {
+    }
+
+    /**
+     * 设置数据密钥（启动期调用一次）。AES-256 要求 32 字节，长度不符直接拒绝。
+     */
+    public static void setKey(String newKey) {
+        if (newKey == null || newKey.getBytes(StandardCharsets.UTF_8).length != 32) {
+            throw new IllegalArgumentException("AES 密钥必须为 32 字节（AES-256）");
+        }
+        aesKey = newKey;
+    }
+
+    public static boolean usingDefaultKey() {
+        return DEFAULT_AES_KEY.equals(aesKey);
+    }
+
+    /**
+     * 构造密钥。
+     *
+     * <p>注意：这里刻意保留 ECB 确定性加密 —— 手机号/车牌要做**密文等值查询**
+     * （如 {@code WHERE plate_no = encrypt(plate)} 判重与反查），随机 IV 的 CBC/GCM
+     * 会让同一明文每次密文不同，现有查询全部失效。彻底改造需新增 blind index 列并回填，
+     * 属 schema 级变更，另行排期；本轮只收口密钥来源（报告 P1-4 的硬编码部分）。
+     */
     private static SecretKeySpec getSecretKey() {
         try {
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            keyGen.init(256);
-            byte[] keyBytes = AES_KEY.getBytes(StandardCharsets.UTF_8);
-            SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
-            return keySpec;
+            byte[] keyBytes = aesKey.getBytes(StandardCharsets.UTF_8);
+            return new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
             throw new RuntimeException("AES密钥初始化失败", e);
         }

@@ -33,7 +33,16 @@ import java.util.List;
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final String SECRET = "SmartParkingSystemSecretKey2026VeryLongKey!!";
+    /**
+     * JWT 签名密钥：必须与 user 服务一致。
+     * 报告 P1-1：原先硬编码在网关与 JwtUtils 两处，源码泄露即可自签 ADMIN token。
+     * 现改为配置注入，生产用 SMART_PARKING_JWT_SECRET 覆盖（与 common-core 的 SecuritySecretsConfig 同一优先级）。
+     */
+    @Value("${SMART_PARKING_JWT_SECRET:${smart-parking.jwt-secret:SmartParkingSystemSecretKey2026VeryLongKey!!}}")
+    private String secret = DEFAULT_SECRET;
+
+    private static final String DEFAULT_SECRET = "SmartParkingSystemSecretKey2026VeryLongKey!!";
+
     private static final String TOKEN_PREFIX = "Bearer ";
 
     /** 内部调用令牌 Header：/internal/** 仅允许携带该 Header 的请求通过（服务间约定，外部用户 token 无效） */
@@ -48,6 +57,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             // 头像图片：浏览器 <img> 不会携带 Authorization 头，若要求鉴权则头像恒为裂图。
             // 文件名是 UUID + 图片后缀（服务端另有正则白名单），不含业务敏感信息。
             "/api/user/avatar/**",
+            // 支付渠道服务器回调：渠道侧不带 JWT，必须放行到 payment 服务。
+            // 安全性由服务端验签保证（sign = MD5(payNo + "&" + callbackSecret)，见
+            // PaymentRecordController#handleCallback），验签失败一律返回 FAIL 且不置成功。
+            "/api/payment/callback/**",
             // 注意：原 /api/**/internal/** 白名单已移除（E2E 报告 P0-1：业主可经网关直接调内部接口退款/伪造支付）。
             // /internal/** 现要求 X-Internal-Token 校验，见 filter() 内部分支。
             "/doc.html",
@@ -83,7 +96,19 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "PUT /api/parking/space/*",        // 修改车位信息
             "DELETE /api/parking/space/*",     // 删除车位
             "GET /api/notify/feedback/all",    // 读全量反馈
-            "POST /api/notify/feedback/*/reply" // 回复反馈
+            "POST /api/notify/feedback/*/reply", // 回复反馈
+            // 报告 P0-3/P1-6：以下接口会直接改变钱或放行车辆，此前业主可自助调用
+            "POST /api/vehicle/*/renew-monthly",   // 免费续月卡后门
+            "PUT /api/vehicle/*/blacklist",        // 黑名单（影响道闸放行）
+            "POST /api/order/entry",               // 手动建入场单（此前任何用户可伪造入场）
+            "POST /api/order/invite/entry-by-plate", // 车牌放行（此前任何用户可触发开闸）
+            "POST /api/notify/send",               // 代发任意通知
+            // 计费规则写操作：单价/封顶直接决定应收金额，只允许管理员改；GET 列表保持公开只读
+            "POST /api/order/billing-rules",
+            "PUT /api/order/billing-rules/*",
+            "DELETE /api/order/billing-rules/*",
+            // 发票开具/红冲：涉及税务凭证，只允许管理员；/apply 与 /my 保持业主可用
+            "/api/payment/invoice/admin/**"
             // 注意：/api/user/update 不在管理端白名单内 —— 业主也需要修改本人资料，
             // 服务端已按 X-User-Role=0 强制把 dto.id 覆盖为当前登录人，避免越权改他人。
     );
@@ -91,8 +116,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     /** 内部令牌配置值：生产环境经 NACOS/环境变量覆盖；缺省为开发联调固定值 */
-    @Value("${gateway.internal-token:SmartParking-Internal-2026}")
-    private String internalToken;
+    @Value("${SP_INTERNAL_TOKEN:${gateway.internal-token:SmartParking-Internal-2026}}")
+    private String internalToken = "SmartParking-Internal-2026";
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
@@ -189,12 +214,20 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private Claims parseToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         return Jwts.parser()
                 .verifyWith(key)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    @jakarta.annotation.PostConstruct
+    void warnOnDefaultSecrets() {
+        if (DEFAULT_SECRET.equals(secret) || "SmartParking-Internal-2026".equals(internalToken)) {
+            log.warn("网关正在使用内置默认 JWT/内部令牌，仅限本地演示 —— 生产必须注入 "
+                    + "SMART_PARKING_JWT_SECRET / SP_INTERNAL_TOKEN");
+        }
     }
 
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {

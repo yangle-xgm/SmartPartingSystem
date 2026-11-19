@@ -23,8 +23,11 @@ spring:
     table: schema_history_vehicle
     locations: classpath:db/migration
     baseline-on-migrate: true
-    # V1/V2 是建表与种子脚本，存量库已手工执行过；非空库以 V2 为基线跳过它们，只增量执行 V3+
-    baseline-version: "2"
+    # 基线版本设为 0：新库（以及"仅其它模块已建表"的共享库）都能从 V1 开始全量执行。
+    # 注意不能用 "2" —— 8 个模块共用同一 schema，任一模块建表后 schema 即非空，
+    # 后续模块会被 Flyway 视为"存量库"而跳过自己的 V1/V2，导致自身表永远建不出来。
+    # V1 已全部改为 CREATE TABLE IF NOT EXISTS、V2 用 INSERT IGNORE，重复执行安全。
+    baseline-version: "0"
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3307/smart_parking?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true

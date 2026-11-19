@@ -16,13 +16,40 @@ import java.util.Map;
  */
 public class JwtUtils {
 
-    /** 默认密钥（生产环境应从配置中心读取） */
-    private static final String SECRET = "SmartParkingSystemSecretKey2026VeryLongKey!!";
+    /**
+     * 内置开发默认密钥：仅用于本地启动/单元测试。
+     * 生产必须通过 {@code SMART_PARKING_JWT_SECRET} 或 {@code smart-parking.jwt-secret} 注入，
+     * 并由 {@code smart-parking.strict-secrets=true} 强制校验（见 SecuritySecretsConfig）。
+     */
+    private static final String DEFAULT_SECRET = "SmartParkingSystemSecretKey2026VeryLongKey!!";
+
+    /** 运行期生效的密钥，由 SecuritySecretsConfig 在启动时覆盖 */
+    private static volatile String secret = DEFAULT_SECRET;
+
     private static final long EXPIRE_MS = 2 * 60 * 60 * 1000L; // access token 2小时
     private static final long REFRESH_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000L; // refresh token 7天
 
+    private JwtUtils() {
+    }
+
+    /**
+     * 设置签名密钥（启动期调用一次）。
+     * HMAC-SHA256 要求密钥 ≥ 256 bit，过短直接拒绝，避免弱密钥静默生效。
+     */
+    public static void setSecret(String newSecret) {
+        if (newSecret == null || newSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("JWT 密钥长度不足 32 字节，无法满足 HS256 安全强度");
+        }
+        secret = newSecret;
+    }
+
+    /** 是否仍在使用内置默认密钥（供启动自检/健康检查使用） */
+    public static boolean usingDefaultSecret() {
+        return DEFAULT_SECRET.equals(secret);
+    }
+
     private static SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     /**

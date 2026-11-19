@@ -1,1 +1,3 @@
 com.smartparking.common.core.config.CaffeineConfig
+com.smartparking.common.core.config.SecuritySecretsConfig
+com.smartparking.common.core.config.InternalApiGuardConfig
