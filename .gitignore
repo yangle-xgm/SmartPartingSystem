@@ -44,6 +44,9 @@ smart-parking-device-service-*/
 run-logs/
 logs/
 
+# ===== 数据库备份（含车牌/手机号密文与真实业务数据，禁止入库） =====
+backups/
+
 # ===== Playwright E2E 产物（可重建，不入库） =====
 scripts/e2e/test-results/
 scripts/e2e/playwright-report/
