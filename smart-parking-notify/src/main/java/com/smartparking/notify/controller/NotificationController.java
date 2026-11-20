@@ -1,6 +1,7 @@
 package com.smartparking.notify.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
 import com.smartparking.common.core.exception.BizException;
@@ -37,10 +38,12 @@ public class NotificationController {
     private String gatewayUrl;
 
     /**
-     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header，
-     * 缺省值与网关 gateway.internal-token 保持一致，生产用 SP_INTERNAL_TOKEN 统一覆盖。
+     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header。
+     * <p>占位符必须与 {@code InternalApiGuardConfig} / {@code SecuritySecretsConfig} 完全一致
+     * （同样优先 SP_INTERNAL_TOKEN）：否则只配了环境变量时，网关读新令牌放行、这里仍发内置
+     * 默认值，拉业主列表被 403 拦掉，广播会静默失败。
      */
-    @Value("${smart-parking.internal-token:SmartParking-Internal-2026}")
+    @Value("${SP_INTERNAL_TOKEN:${smart-parking.internal-token:" + Constants.DEFAULT_INTERNAL_TOKEN + "}}")
     private String internalToken;
 
     private final RestTemplate restTemplate = buildRestTemplate();
