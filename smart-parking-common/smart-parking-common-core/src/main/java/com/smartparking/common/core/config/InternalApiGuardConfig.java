@@ -1,5 +1,6 @@
 package com.smartparking.common.core.config;
 
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.common.core.http.InternalHttp;
 import com.smartparking.common.core.web.InternalApiGuardFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,12 +19,12 @@ import org.springframework.util.StringUtils;
 @ConditionalOnClass(name = "jakarta.servlet.Filter")
 public class InternalApiGuardConfig {
 
-    @Value("${SP_INTERNAL_TOKEN:${smart-parking.internal-token:SmartParking-Internal-2026}}")
+    @Value("${SP_INTERNAL_TOKEN:${smart-parking.internal-token:" + Constants.DEFAULT_INTERNAL_TOKEN + "}}")
     private String internalToken;
 
     @Bean
     public FilterRegistrationBean<InternalApiGuardFilter> internalApiGuardFilter() {
-        String token = StringUtils.hasText(internalToken) ? internalToken : "SmartParking-Internal-2026";
+        String token = StringUtils.hasText(internalToken) ? internalToken : Constants.DEFAULT_INTERNAL_TOKEN;
         // 直连下游 /internal 的调用方统一从 InternalHttp 取令牌，保证两侧永远同源
         InternalHttp.setToken(token);
 

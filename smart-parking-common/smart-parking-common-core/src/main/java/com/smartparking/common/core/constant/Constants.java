@@ -74,6 +74,12 @@ public class Constants {
     /** 支付状态：支付失败 */
     public static final int PAY_STATUS_FAILED = 4;
 
+    /** 支付业务类型：停车订单（biz_id / order_id 均为 parking_order.id） */
+    public static final int BIZ_TYPE_PARKING_ORDER = 1;
+
+    /** 支付业务类型：月卡（biz_id = monthly_card_order.id，order_id 为 NULL） */
+    public static final int BIZ_TYPE_MONTHLY_CARD = 2;
+
     /** 设备类型：道闸 */
     public static final int DEVICE_TYPE_GATE = 1;
 
@@ -98,6 +104,23 @@ public class Constants {
      * 否则返回 403「内部接口禁止外部访问」。
      */
     public static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+
+    /**
+     * 内部接口令牌的内置开发默认值。
+     *
+     * <p>仅供本地演示；{@code smart-parking.strict-secrets=true} 时该值被禁止使用，
+     * 与 {@code InternalApiGuardConfig}、{@code SecuritySecretsConfig} 共用同一份常量，
+     * 避免默认值散落多处后改一处漏一处。
+     */
+    public static final String DEFAULT_INTERNAL_TOKEN = "SmartParking-Internal-2026";
+
+    /**
+     * 支付回调签名的内置开发默认值。
+     *
+     * <p>回调 {@code sign = MD5(payNo + "&" + callbackSecret)}，默认值一旦上线即等于
+     * 任何人都能伪造「支付成功」回调。同上，{@code strict-secrets=true} 时禁止使用。
+     */
+    public static final String DEFAULT_CALLBACK_SECRET = "SmartParkingCallback2026";
 
     private Constants() {
     }
