@@ -43,16 +43,6 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
     private final BillingClient billingClient;
     private final AuditClient auditClient;
 
-    /**
-     * 模拟支付开关（与 payment 模块同名键，一处关闭所有 mock 通道）。
-     *
-     * <p>{@code pay()} 是自助充值入口：默认 true 时业主点一下就白拿月卡，属于「演示用免费通道」，
-     * 只能在毕设/联调环境开启。接入真实收银台后置 false，该端点会直接拒绝，
-     * 业主必须走真实支付渠道回调才会延期。</p>
-     */
-    @org.springframework.beans.factory.annotation.Value("${smart-parking.payment.mock-enabled:true}")
-    private boolean mockPayEnabled;
-
     /** 允许购买的月数档位 */
     private static final Set<Integer> ALLOWED_MONTHS = Set.of(1, 3, 6, 12);
 
@@ -114,29 +104,34 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> pay(String orderNo, Long currentUserId, String currentRole) {
-        if (!mockPayEnabled) {
-            throw new BizException(ErrorCode.PARAM_INVALID,
-                    "当前环境已启用真实支付渠道，请通过收银台完成支付后再查询结果");
+    public MonthlyCardOrder getMonthlyOrder(Long monthlyOrderId) {
+        if (monthlyOrderId == null) {
+            return null;
         }
-        MonthlyCardOrder order = orderMapper.selectOne(new LambdaQueryWrapper<MonthlyCardOrder>()
-                .eq(MonthlyCardOrder::getOrderNo, orderNo)
-                .last("LIMIT 1"));
+        return orderMapper.selectById(monthlyOrderId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> markPaid(Long monthlyOrderId, String payNo, String transactionId) {
+        MonthlyCardOrder order = orderMapper.selectById(monthlyOrderId);
         if (order == null) {
             throw new BizException(ErrorCode.ORDER_NOT_FOUND, "月卡订单不存在");
         }
-        requireOwner(order.getUserId(), currentUserId, currentRole);
-        if (order.getPayStatus() == null || order.getPayStatus() != 0) {
-            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "该订单已支付或已失效，请勿重复支付");
+        // 幂等：渠道会重复回调 / 前端会重复补查，已支付直接返回，绝不二次续期
+        if (order.getPayStatus() != null && order.getPayStatus() == 1) {
+            if (payNo != null && !payNo.equals(order.getPayNo())) {
+                log.warn("月卡订单 {} 已由流水 {} 支付，本次回调流水 {} 忽略",
+                        monthlyOrderId, order.getPayNo(), payNo);
+            }
+            return paidResult(order);
+        }
+        if (order.getPayStatus() != null && order.getPayStatus() == 3) {
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "该月卡订单已取消，无法续期");
         }
 
         LocalDateTime now = LocalDateTime.now();
-        String payNo = "MC" + now.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
-                + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
-        String transactionId = "MOCK-" + payNo;
-
-        // 原子条件更新：只有仍是待支付才能落成功，防并发重复支付导致多次续期
+        // 原子条件更新：只有仍是待支付才能落成功，防并发重复回调导致多次续期
         int affected = orderMapper.update(null, new LambdaUpdateWrapper<MonthlyCardOrder>()
                 .eq(MonthlyCardOrder::getId, order.getId())
                 .eq(MonthlyCardOrder::getPayStatus, 0)
@@ -146,10 +141,15 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
                 .set(MonthlyCardOrder::getPayTime, now)
                 .set(MonthlyCardOrder::getUpdateTime, now));
         if (affected == 0) {
-            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "该订单已支付或已失效，请勿重复支付");
+            // 并发回调：别人先置成功了，按幂等返回而不是报错
+            MonthlyCardOrder latest = orderMapper.selectById(monthlyOrderId);
+            if (latest != null && latest.getPayStatus() != null && latest.getPayStatus() == 1) {
+                return paidResult(latest);
+            }
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "月卡订单状态已变更，无法续期");
         }
 
-        // 车辆月卡生效：到期时间取订单承诺值（下单时已按基准算好），type 置为月租车
+        // 车辆月卡生效：到期时间取下单时的承诺值（下单已按基准算好），避免支付延迟导致漂移
         Vehicle v = vehicleMapper.selectById(order.getVehicleId());
         if (v == null) {
             throw new BizException(ErrorCode.VEHICLE_NOT_FOUND);
@@ -158,16 +158,24 @@ public class MonthlyCardServiceImpl implements MonthlyCardService {
         v.setType(2);
         vehicleMapper.updateById(v);
 
-        auditClient.record(order.getUserId(), null, "月卡支付", "POST /api/vehicle/monthly/pay",
-                "{\"orderNo\":\"" + orderNo + "\",\"payNo\":\"" + payNo
+        auditClient.record(order.getUserId(), null, "月卡支付", "POST /api/vehicle/internal/monthly/mark-paid",
+                "{\"orderNo\":\"" + order.getOrderNo() + "\",\"payNo\":\"" + payNo
                         + "\",\"amount\":" + order.getAmount() + "}", true);
 
-        log.info("月卡充值成功：orderNo={}, vehicleId={}, months={}, expireAfter={}",
-                orderNo, order.getVehicleId(), order.getMonths(), order.getExpireAfter());
+        log.info("月卡续期成功：orderNo={}, vehicleId={}, months={}, expireAfter={}",
+                order.getOrderNo(), order.getVehicleId(), order.getMonths(), order.getExpireAfter());
 
+        order.setPayStatus(1);
+        order.setPayNo(payNo);
+        order.setTransactionId(transactionId);
+        order.setPayTime(now);
+        return paidResult(order);
+    }
+
+    private Map<String, Object> paidResult(MonthlyCardOrder order) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("orderNo", orderNo);
-        result.put("payNo", payNo);
+        result.put("orderNo", order.getOrderNo());
+        result.put("payNo", order.getPayNo());
         result.put("amount", order.getAmount());
         result.put("months", order.getMonths());
         result.put("expireAfter", order.getExpireAfter());

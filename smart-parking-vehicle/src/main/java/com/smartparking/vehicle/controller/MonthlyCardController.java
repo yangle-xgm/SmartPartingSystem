@@ -53,15 +53,6 @@ public class MonthlyCardController {
         return Result.success(order);
     }
 
-    @Operation(summary = "模拟支付（成功即延长月卡有效期）")
-    @PostMapping("/pay")
-    public Result<Map<String, Object>> pay(
-            @Parameter(description = "月卡订单号") @RequestParam String orderNo,
-            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
-            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
-        return Result.success(monthlyCardService.pay(orderNo, parseLong(currentUserId), currentRole));
-    }
-
     @Operation(summary = "我的月卡订单")
     @GetMapping("/orders")
     public Result<List<MonthlyCardOrder>> orders(

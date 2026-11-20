@@ -180,7 +180,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showSuccessToast, showToast } from 'vant'
-import { getVehicleList, quoteMonthly, createMonthlyOrder, payMonthly, getMonthlyOrders } from '@/api/vehicle'
+import { getVehicleList, quoteMonthly, createMonthlyOrder, getMonthlyOrders } from '@/api/vehicle'
+import { createMonthlyPayment } from '@/api/payment'
+import { wechatPay, alipayPay } from '@/api/order'
+import { isAlipaySandboxReady, payWithAlipaySandbox, settleReturnedPayment } from '@/utils/alipaySandbox'
 import { getUserId } from '@/api/user'
 
 const router = useRouter()
@@ -215,7 +218,9 @@ const tempCount = computed(() => vehicles.value.filter((v) => !v.monthlyExpire).
 const unitPrice = computed(() => Number(quote.value?.unitPrice ?? 0))
 const canPay = computed(() => !!quote.value && !quoting.value && !paying.value)
 
-onMounted(() => {
+onMounted(async () => {
+  // 从支付宝收银台跳回时先补查一次到账（notify 回不到内网时的唯一自愈时机）
+  await settleReturnedPayment()
   loadVehicles()
   loadOrders()
 })
@@ -290,14 +295,39 @@ async function onPaySelect(action) {
   if (!quote.value) return
   paying.value = true
   try {
+    // 1) 下单：锁定月单价与「充值后的到期时间」，此时还没有收钱
     const created = await createMonthlyOrder(vehicleId.value, months.value, action.value)
     if (created.code !== 200) return
-    const orderNo = created.data?.orderNo
-    if (!orderNo) {
+    const monthlyOrderId = created.data?.id
+    if (!monthlyOrderId) {
       showToast('月卡订单创建失败')
       return
     }
-    const paid = await payMonthly(orderNo)
+
+    // 2) 建支付流水：月卡与停车订单同一张表、同一套收银台，
+    //    这样收入统计 / 发票 / 对账都能看到月卡这笔钱（此前 vehicle 自己置成功会漏账）
+    const payCreated = await createMonthlyPayment(monthlyOrderId, action.value)
+    if (payCreated.code !== 200) return
+    const payNo = payCreated.data?.payNo
+    if (!payNo) {
+      showToast('支付流水号生成失败')
+      return
+    }
+
+    // 3) 支付宝沙箱：跳转收银台 + 轮询确认到账（真实扣沙箱账户余额）
+    if (action.value === 2 && (await isAlipaySandboxReady())) {
+      const result = await payWithAlipaySandbox(payNo)
+      if (result.ok) {
+        showSuccessToast('支付宝支付成功')
+        await Promise.all([loadVehicles(), loadOrders()])
+      } else {
+        showToast(result.message || '支付未完成')
+      }
+      return
+    }
+
+    // 4) 模拟第三方支付回调（微信通道 / 未配置沙箱时的支付宝）
+    const paid = action.value === 1 ? await wechatPay(payNo) : await alipayPay(payNo)
     if (paid.code === 200) {
       showSuccessToast(paid.data?.message || '充值成功')
       await Promise.all([loadVehicles(), loadOrders()])

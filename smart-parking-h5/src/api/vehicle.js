@@ -54,14 +54,7 @@ export function createMonthlyOrder(vehicleId, months, payType = 1) {
   })
 }
 
-// 模拟支付：成功后月卡立即生效
-export function payMonthly(orderNo) {
-  return request({
-    url: '/vehicle/monthly/pay',
-    method: 'post',
-    params: { orderNo }
-  })
-}
+// 月卡支付已并入支付服务：下单后用 createMonthlyPayment() 建流水再走收银台
 
 // 我的月卡订单
 export function getMonthlyOrders() {

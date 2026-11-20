@@ -44,8 +44,8 @@
             <span class="code">{{ row.payNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="订单ID" width="190" show-overflow-tooltip>
-          <template #default="{ row }"><span class="sp-num mono">{{ row.orderId }}</span></template>
+        <el-table-column label="业务单" width="190" show-overflow-tooltip>
+          <template #default="{ row }"><span class="sp-num mono">{{ bizLabel(row) }}</span></template>
         </el-table-column>
         <el-table-column label="金额" width="110">
           <template #default="{ row }">
@@ -254,6 +254,8 @@ const priceText = (r) => {
 }
 
 const payTypeMap = { 1: '微信', 2: '支付宝', 3: '现金' }
+// 月卡流水没有停车订单号，用业务单ID兜底，避免表格出现空单元格
+const bizLabel = (row) => (row.bizType === 2 ? `月卡 #${row.bizId ?? '-'}` : (row.orderId ?? '-'))
 // 后端 Constants：0 待支付 / 1 支付成功 / 2 已退款 / 3 已关闭（超时关单）/ 4 支付失败
 const payStatusMap = { 0: '待支付', 1: '支付成功', 2: '已退款', 3: '已关闭', 4: '支付失败' }
 
@@ -338,6 +340,8 @@ const handleConfirmPay = async () => {
 const openBill = async (row) => {
   bill.value = row
   billVisible.value = true
+  // 月卡流水没有停车订单号，列表数据已足够展示，不必再查账单
+  if (!row.orderId) return
   try {
     // GET /api/payment/bill?orderId= ，订单无流水时后端返回 data=null
     const res = await getPaymentByOrder(row.orderId)

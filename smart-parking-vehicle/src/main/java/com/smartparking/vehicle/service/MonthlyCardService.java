@@ -23,10 +23,21 @@ public interface MonthlyCardService {
                                  Long currentUserId, String currentRole);
 
     /**
-     * 模拟支付：标记订单已支付，并把车辆月卡有效期延长到订单承诺的时间。
-     * 幂等：重复支付同一订单直接拒绝，不会二次延长。
+     * 按主键取月卡订单（内部接口用：支付服务创建流水前校验金额与状态）。
      */
-    Map<String, Object> pay(String orderNo, Long currentUserId, String currentRole);
+    MonthlyCardOrder getMonthlyOrder(Long monthlyOrderId);
+
+    /**
+     * 支付到账后置为已支付并续期。
+     *
+     * <p>由支付服务的 {@code paymentSuccess} 在核销后调用（内部接口），<b>幂等</b>：
+     * 同一订单重复回调只续期一次。此前这里是 vehicle 自己的 mock 自助通道，
+     * 不产生支付流水、收入统计漏账，已废弃。
+     *
+     * @param payNo         支付服务生成的流水号（落库用于对账）
+     * @param transactionId 第三方交易号
+     */
+    Map<String, Object> markPaid(Long monthlyOrderId, String payNo, String transactionId);
 
     /**
      * 我的月卡订单（按创建时间倒序）
