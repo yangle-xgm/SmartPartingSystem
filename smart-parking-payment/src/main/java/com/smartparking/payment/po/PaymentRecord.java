@@ -21,7 +21,19 @@ public class PaymentRecord extends BaseEntity {
     @Schema(description = "支付流水号")
     private String payNo;
 
-    @Schema(description = "关联订单ID")
+    /**
+     * 业务类型：1 停车订单 / 2 月卡。
+     *
+     * <p>月卡此前不经过支付服务（vehicle 自造 MOCK 流水），收入/发票/对账三条链路全部漏账；
+     * 纳入本表后所有真金白银只有一个记账口径。字段与 {@code bizId} 成对使用。
+     */
+    @Schema(description = "业务类型（1停车订单 2月卡）")
+    private Integer bizType;
+
+    @Schema(description = "业务单ID（停车=parking_order.id 月卡=monthly_card_order.id）")
+    private Long bizId;
+
+    @Schema(description = "关联停车订单ID（月卡流水为 NULL）")
     private Long orderId;
 
     @Schema(description = "支付用户ID")

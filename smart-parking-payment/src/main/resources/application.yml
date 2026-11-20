@@ -87,8 +87,33 @@ smart-parking:
   audit-url: http://localhost:8081
   # 网关地址（支付确认直连兜底）
   gateway-url: http://localhost:8080
-  # 服务间内部令牌：经网关调用 /api/**/internal/** 时必须携带，须与网关 gateway.internal-token 一致
+  # 服务间内部令牌：经网关调用 /api/**/internal/** 时必须携带，须与网关 gateway.internal-token 一致。
+  # 下面的缺省串是开发默认值，strict-secrets=true 时 SecuritySecretsConfig 会拒绝启动。
   internal-token: ${SP_INTERNAL_TOKEN:SmartParking-Internal-2026}
+
+  # ============ 支付闭环 → 设备厂商通道 ============
+  # 核销成功后是否自动抬杆：payment 事务提交后经网关调
+  # POST /api/device/internal/gate/release，由 device 服务按 device.vendor 选适配器下发。
+  # 关掉（false）则只入账不动闸，适合闸机尚未接入或「先缴费后人工放行」的场地。
+  gate:
+    release-on-payment: ${SP_GATE_RELEASE_ON_PAYMENT:true}
+
+  # ============ 模拟支付与回调验签 ============
+  # 这两项只在 payment 存在，由 PaymentStrictModeGuard 在 strict-secrets=true 时强校验：
+  #   mock-enabled 必须为 false、callback-secret 必须非默认值，否则拒绝启动。
+  payment:
+    # 模拟支付通道：true 时「模拟支付」端点可用（点一下即成功，不经过任何渠道）。
+    # 生产必须置 false —— 否则等于给所有人开了免单入口。
+    mock-enabled: ${SP_MOCK_PAY_ENABLED:true}
+    # 回调验签密钥：sign = MD5(payNo + "&" + 本值)，十六进制小写。
+    # 留在本文件里的只是开发默认值，生产必须通过 SP_CALLBACK_SECRET 注入随机串。
+    callback-secret: ${SP_CALLBACK_SECRET:SmartParkingCallback2026}
+
+  # ============ 共享车位分润 ============
+  share:
+    # 业主分成占比，物业 = 1 - 该值；合法区间 (0,1)，例如 0.7 表示业主七成。
+    # 配置非法时回退 0.7 并打 WARN，不中断分润（分润失败虽不阻断支付，但会静默漏账）。
+    owner-ratio: ${SP_SHARE_OWNER_RATIO:0.7}
 
   # ============ 支付宝沙箱渠道 ============
   # 沙箱账号（2026-11-19 实配）：APPID=9021000172614567，加签方式=「系统默认密钥（公钥模式已启用）」。

@@ -18,6 +18,15 @@ public interface PaymentRecordService extends IService<PaymentRecord> {
     PaymentRecord createPayment(Long orderId, Long userId, BigDecimal amount, Integer payType);
 
     /**
+     * 创建月卡支付流水。
+     *
+     * <p>月卡与停车订单共用一张流水表，靠 {@code biz_type} 区分：停车单走
+     * {@code orderId} + {@code confirm-payment}，月卡走 {@code bizId} + 车辆服务续期。
+     * 金额与归属以车辆服务的月卡订单为权威，前端传值一律忽略。
+     */
+    PaymentRecord createMonthlyPayment(Long monthlyOrderId, Long userId, Integer payType);
+
+    /**
      * 支付成功回调
      */
     void paymentSuccess(String payNo, String transactionId);

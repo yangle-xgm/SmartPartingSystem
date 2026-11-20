@@ -395,6 +395,92 @@ public class DeviceServiceImpl extends ServiceImpl<DeviceMapper, Device> impleme
         return gateAckRegistry.recent(limit);
     }
 
+    /**
+     * 支付成功联动开闸。
+     *
+     * <p>设计取舍：
+     * <ul>
+     *   <li><b>不抛异常</b> —— 钱已经收了，开闸失败只能记日志等人工/重试，绝不能让
+     *       调用方以为核销失败而回滚；</li>
+     *   <li><b>自动挑出口道闸</b> —— 支付对应的是出场场景，优先选名称含「出口」的在线道闸；
+     *       只部署单闸的场地没有出口标记时回退到任意在线道闸，避免"付了钱不放行"；</li>
+     *   <li><b>无闸在线也返回 success=false</b> 而不是报错 —— 现场闸机离线是运维问题，
+     *       由 command-log 与日志定位。</li>
+     * </ul>
+     */
+    @Override
+    public Map<String, Object> releaseForPayment(String payNo, String orderId, String reason, String deviceNo) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("payNo", payNo);
+        result.put("orderId", orderId);
+
+        Device gate;
+        if (deviceNo != null && !deviceNo.isBlank()) {
+            gate = getDeviceByNo(deviceNo);
+            if (gate == null || !Integer.valueOf(1).equals(gate.getDeviceType())) {
+                result.put("success", false);
+                result.put("message", "指定设备不存在或不是道闸：" + deviceNo);
+                return result;
+            }
+            if (!Integer.valueOf(1).equals(gate.getStatus())) {
+                result.put("success", false);
+                result.put("deviceNo", deviceNo);
+                result.put("message", "指定道闸离线，未下发开闸指令：" + deviceNo);
+                return result;
+            }
+        } else {
+            List<Device> onlineGates = this.lambdaQuery()
+                    .eq(Device::getDeviceType, 1)
+                    .eq(Device::getStatus, 1)
+                    .list();
+            gate = pickReleaseGate(onlineGates);
+            if (gate == null) {
+                result.put("success", false);
+                result.put("message", "无在线道闸，未下发开闸指令");
+                return result;
+            }
+        }
+
+        String why = reason == null || reason.isBlank() ? "支付成功放行" : reason;
+        GateResult gateResult = dispatchOpen(gate, why);
+        result.put("success", gateResult.isSuccess());
+        result.put("deviceNo", gate.getDeviceNo());
+        result.put("deviceName", gate.getDeviceName());
+        result.put("vendor", gateResult.getVendor());
+        result.put("transport", gateResult.getTransport());
+        result.put("seq", gateResult.getSeq());
+        result.put("gateAck", !gateResult.isAckTimeout());
+        result.put("latencyMs", gateResult.getLatencyMs());
+        result.put("message", gateResult.getMessage());
+
+        if (gateResult.isSuccess()) {
+            log.info("[支付联动开闸] payNo={}, orderId={}, device={}({}), vendor={}, transport={}, 回执={}, 耗时={}ms",
+                    payNo, orderId, gate.getDeviceNo(), gate.getDeviceName(), gateResult.getVendor(),
+                    gateResult.getTransport(), !gateResult.isAckTimeout(), gateResult.getLatencyMs());
+        } else {
+            log.error("[支付联动开闸] 下发失败 payNo={}, orderId={}, device={}, msg={}",
+                    payNo, orderId, gate.getDeviceNo(), gateResult.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 从在线道闸中挑一台用于支付放行：优先名称含「出口」的，否则取第一台。
+     *
+     * <p>抽成静态方法便于单测覆盖（不需要 Spring 容器与数据库）。
+     */
+    static Device pickReleaseGate(List<Device> onlineGates) {
+        if (onlineGates == null || onlineGates.isEmpty()) {
+            return null;
+        }
+        for (Device gate : onlineGates) {
+            if (gate.getDeviceName() != null && gate.getDeviceName().contains("出口")) {
+                return gate;
+            }
+        }
+        return onlineGates.get(0);
+    }
+
     @Override
     public Map<String, Object> getStatusOverview() {
         List<Device> allDevices = this.list();

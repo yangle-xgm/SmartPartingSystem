@@ -13,8 +13,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Map;
+
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -77,5 +81,37 @@ class DeviceInternalApiContractTest {
                 // DEF-02：缺参数统一 PARAM_INVALID(400)
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("POST /internal/gate/release：支付联动开闸参数透传，通道结果放在 data.success 而非 HTTP 状态码")
+    void releaseForPayment_passesParamsAndKeepsHttp200() throws Exception {
+        // 约定：开闸失败也是 200 + data.success=false —— 钱已收了，调用方不该按 4xx/5xx 重试
+        when(deviceService.releaseForPayment(eq("PAY202611191605014929"), eq("9003"), eq("支付成功放行"), isNull()))
+                .thenReturn(Map.of("success", true, "deviceNo", "GATE-A-002", "vendor", "sandbox"));
+
+        mockMvc.perform(post("/api/device/internal/gate/release")
+                        .param("payNo", "PAY202611191605014929")
+                        .param("orderId", "9003")
+                        .param("reason", "支付成功放行"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.success").value(true))
+                .andExpect(jsonPath("$.data.deviceNo").value("GATE-A-002"))
+                .andExpect(jsonPath("$.data.vendor").value("sandbox"));
+
+        verify(deviceService).releaseForPayment(eq("PAY202611191605014929"), eq("9003"), eq("支付成功放行"), isNull());
+    }
+
+    @Test
+    @DisplayName("POST /internal/gate/release：所有参数都可省略（payment 只传 payNo 也能走通）")
+    void releaseForPayment_allParamsOptional() throws Exception {
+        when(deviceService.releaseForPayment(isNull(), isNull(), isNull(), isNull()))
+                .thenReturn(Map.of("success", false, "message", "无在线道闸，未下发开闸指令"));
+
+        mockMvc.perform(post("/api/device/internal/gate/release"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.success").value(false));
     }
 }

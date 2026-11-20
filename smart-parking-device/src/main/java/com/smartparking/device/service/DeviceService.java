@@ -67,4 +67,14 @@ public interface DeviceService extends IService<Device> {
      * 演示与排障用：直观看到「指令下发了什么、设备有没有回执」。
      */
     java.util.List<Map<String, Object>> recentGateCommands(int limit);
+
+    /**
+     * 支付成功联动开闸（内部接口，由 payment 服务在核销成功后调用）。
+     *
+     * <p>与 {@link #openGate(String)} 的区别：本方法<b>不抛异常</b>。支付已经成功，
+     * 开闸失败不能反过来让入账回滚或让调用方重试；失败原因放在返回值里由调用方记日志。
+     *
+     * @param deviceNo 指定道闸；为空则自动挑选在线的出口道闸
+     */
+    Map<String, Object> releaseForPayment(String payNo, String orderId, String reason, String deviceNo);
 }

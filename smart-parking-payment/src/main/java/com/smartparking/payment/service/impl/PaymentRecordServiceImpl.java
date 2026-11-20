@@ -49,11 +49,49 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
     private String gatewayUrl;
 
     /**
-     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header，
-     * 缺省值与网关 gateway.internal-token 保持一致，生产用 SP_INTERNAL_TOKEN 统一覆盖。
+     * 服务间内部令牌：网关对 /api/**&#47;internal/** 强制校验该 Header。
+     *
+     * <p>占位符必须与 {@code InternalApiGuardConfig} 完全一致（同样优先 SP_INTERNAL_TOKEN）：
+     * 否则只配环境变量时，守门器取到新令牌而本类仍用旧默认值，内部调用恒 403。
      */
-    @Value("${smart-parking.internal-token:SmartParking-Internal-2026}")
+    @Value("${SP_INTERNAL_TOKEN:${smart-parking.internal-token:" + Constants.DEFAULT_INTERNAL_TOKEN + "}}")
     private String internalToken;
+
+    /**
+     * 共享车位分润比例（业主分成占比），物业占比 = 1 - 该值。
+     *
+     * <p>小区按 7:3 分成，但不同小区的谈定比例不同，写死会导致换场地必须改代码重新发版。
+     * 配置非法（≤0、≥1、非数字）时回退 {@link #DEFAULT_OWNER_SHARE_RATIO} 并告警，
+     * 而不是抛错：分润失败虽不阻断支付，但会造成静默漏账，运维更需要看到一条明确的 WARN。
+     */
+    @Value("${smart-parking.share.owner-ratio:0.7}")
+    private BigDecimal ownerShareRatio;
+
+    /** 分润比例的兜底值，与历史数据保持一致，避免配置手误后业主分成金额突变 */
+    static final BigDecimal DEFAULT_OWNER_SHARE_RATIO = new BigDecimal("0.7");
+
+    /**
+     * 核销成功后是否联动开闸（默认开）。关掉后支付只入账不动闸，
+     * 适合「先缴费后人工放行」或闸机尚未接入的场地。
+     */
+    @Value("${smart-parking.gate.release-on-payment:true}")
+    private boolean releaseGateOnPayment;
+
+    /**
+     * 开闸线程池：指令要等设备 ACK（默认 1.5s 超时），不能占用支付确认线程 ——
+     * H5 轮询 /alipay/query 期望的是"到账了没有"，不该被闸机回执拖慢。
+     */
+    private static final java.util.concurrent.ExecutorService GATE_EXECUTOR =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread thread = new Thread(r, "payment-gate-release");
+                thread.setDaemon(true);
+                return thread;
+            });
+
+    @jakarta.annotation.PreDestroy
+    void shutdownGateExecutor() {
+        GATE_EXECUTOR.shutdown();
+    }
 
     private final RestTemplate restTemplate = buildRestTemplate();
 
@@ -134,6 +172,8 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
 
         PaymentRecord record = new PaymentRecord();
         record.setPayNo(generatePayNo());
+        record.setBizType(Constants.BIZ_TYPE_PARKING_ORDER);
+        record.setBizId(orderId);
         record.setOrderId(orderId);
         record.setUserId(userId);
         record.setAmount(amount);
@@ -145,6 +185,88 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
         // 操作审计：发起支付
         auditClient.record(userId, null, "发起支付", "POST /api/payment/create",
                 java.util.Map.of("payNo", record.getPayNo(), "orderId", orderId,
+                        "amount", amount, "payType", payType), true);
+        return record;
+    }
+
+    /**
+     * 创建月卡支付流水。
+     *
+     * <p><b>为什么必须走这里而不是 vehicle 自己置成功</b>：月卡是小区主体收入，
+     * 此前 vehicle 的 {@code /monthly/pay} 自造 {@code MOCK-} 流水直接置已支付，
+     * 不产生 payment_record —— 收入统计（只 SUM payment_record）、发票（按
+     * payment_record.orderId 找流水）、对账三条链路全部漏账。纳入本表后，
+     * 「钱」只有一个记账口径。
+     *
+     * <p>金额与归属以车辆服务的月卡订单为权威（忽略前端传的 amount），
+     * 与停车订单同一原则：支付服务的职责是收钱，不是定价。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PaymentRecord createMonthlyPayment(Long monthlyOrderId, Long userId, Integer payType) {
+        if (monthlyOrderId == null) {
+            throw new BizException(ErrorCode.PARAM_INVALID, "缺少月卡订单ID");
+        }
+        BigDecimal amount;
+        Long ownerId;
+        try {
+            String url = gatewayUrl + "/api/vehicle/internal/monthly/info?monthlyOrderId=" + monthlyOrderId;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = resp == null || !(resp.get("data") instanceof Map)
+                    ? null : (Map<String, Object>) resp.get("data");
+            if (data == null || data.get("id") == null) {
+                throw new BizException(ErrorCode.ORDER_NOT_FOUND, "月卡订单不存在");
+            }
+            int payStatus = data.get("payStatus") == null ? 0 : ((Number) data.get("payStatus")).intValue();
+            if (payStatus == Constants.PAY_STATUS_PAID) {
+                throw new BizException(ErrorCode.PAY_STATUS_ERROR, "该月卡订单已支付，请勿重复支付");
+            }
+            if (payStatus == Constants.PAY_STATUS_CLOSED) {
+                throw new BizException(ErrorCode.ORDER_STATUS_ERROR, "该月卡订单已取消");
+            }
+            amount = data.get("amount") == null ? null : new BigDecimal(String.valueOf(data.get("amount")));
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BizException(ErrorCode.PAY_STATUS_ERROR, "月卡订单金额异常，无法支付");
+            }
+            ownerId = data.get("userId") == null ? null : ((Number) data.get("userId")).longValue();
+            // 业主只能为自己的月卡付款（管理员代付时 userId 为 null，不受此限）
+            if (userId != null && ownerId != null && !userId.equals(ownerId)) {
+                throw new BizException(ErrorCode.FORBIDDEN, "只能为自己的月卡订单付款");
+            }
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("校验月卡订单失败 monthlyOrderId={}：{}", monthlyOrderId, e.getMessage());
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "车辆服务暂不可用，请稍后再试");
+        }
+
+        // 幂等：同一月卡订单已有待支付流水时复用，避免双击生成多笔可各自成功的流水
+        PaymentRecord pending = this.getOne(new LambdaQueryWrapper<PaymentRecord>()
+                .eq(PaymentRecord::getBizType, Constants.BIZ_TYPE_MONTHLY_CARD)
+                .eq(PaymentRecord::getBizId, monthlyOrderId)
+                .eq(PaymentRecord::getPayStatus, Constants.PAY_STATUS_UNPAID)
+                .orderByDesc(PaymentRecord::getCreateTime)
+                .last("LIMIT 1"));
+        if (pending != null) {
+            log.info("月卡订单 {} 已有待支付流水 {}，复用", monthlyOrderId, pending.getPayNo());
+            return pending;
+        }
+
+        PaymentRecord record = new PaymentRecord();
+        record.setPayNo(generatePayNo());
+        record.setBizType(Constants.BIZ_TYPE_MONTHLY_CARD);
+        record.setBizId(monthlyOrderId);
+        record.setOrderId(null);   // 月卡不属于停车订单，order_id 留空（列已允许 NULL）
+        record.setUserId(userId != null ? userId : ownerId);
+        record.setAmount(amount);
+        record.setPayType(payType);
+        record.setPayStatus(Constants.PAY_STATUS_UNPAID);
+        this.save(record);
+
+        auditClient.record(record.getUserId(), null, "发起月卡支付", "POST /api/payment/create",
+                java.util.Map.of("payNo", record.getPayNo(), "monthlyOrderId", monthlyOrderId,
                         "amount", amount, "payType", payType), true);
         return record;
     }
@@ -194,6 +316,12 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
                 java.util.Map.of("payNo", payNo, "transactionId", transactionId,
                         "amount", record.getAmount()), true);
 
+        // 月卡：只需通知车辆服务续期，不走订单确认 / MQ / 分润 / 开闸（月卡不对应停车订单）
+        if (isMonthlyBiz(record.getBizType())) {
+            confirmMonthlyPaid(record, transactionId);
+            return;
+        }
+
         // 发送MQ消息通知订单服务确认支付
         try {
             Map<String, Object> message = new HashMap<>();
@@ -223,6 +351,99 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             handleShareIncome(record);
         } catch (Exception e) {
             log.error("分润计算失败：{}", e.getMessage());
+        }
+
+        // 支付闭环最后一跳：进入设备厂商通道开闸（出口扫码付场景）
+        releaseGateOnPaid(record);
+    }
+
+    /**
+     * 是否月卡业务流水。
+     *
+     * <p>这行判断就是「钱的两条去向」的分岔口：判错会把月卡流水当成停车订单，
+     * 拿 {@code orderId=null} 去调 order 的确认 / 开闸 / 分润，全链路空转且月卡不生效。
+     * 抽成静态方法是为了被单测直接锁定，不依赖整个 service。
+     */
+    static boolean isMonthlyBiz(Integer bizType) {
+        return Integer.valueOf(Constants.BIZ_TYPE_MONTHLY_CARD).equals(bizType);
+    }
+
+    /**
+     * 月卡到账后通知车辆服务续期。
+     *
+     * <p>与开闸相反，这里失败<b>必须抛出</b>：开闸失败时钱已收、车已在出口，记日志放行是对的；
+     * 月卡续期失败时钱已收、卡未生效，如果也吞掉异常，用户会看到「付了钱但月卡没到账」且系统
+     * 毫无感知。抛出让本地事务回滚 —— 流水保持待支付，渠道的 {@code query} 或回调重试会
+     * 再次触发一次续期（钱在渠道，可无限重试），比"记成功但没生效"可恢复得多。
+     */
+    private void confirmMonthlyPaid(PaymentRecord record, String transactionId) {
+        String url = gatewayUrl + "/api/vehicle/internal/monthly/mark-paid"
+                + "?monthlyOrderId=" + record.getBizId()
+                + "&payNo=" + record.getPayNo()
+                + "&transactionId=" + transactionId;
+        try {
+            restTemplate.postForEntity(url, HttpEntity.EMPTY, String.class);
+            log.info("月卡续期成功：monthlyOrderId={}, payNo={}", record.getBizId(), record.getPayNo());
+        } catch (Exception e) {
+            log.error("月卡续期失败（本地流水保持待支付，等待渠道重试）monthlyOrderId={}, payNo={}：{}",
+                    record.getBizId(), record.getPayNo(), e.getMessage());
+            throw new BizException(ErrorCode.PAY_STATUS_ERROR, "月卡续期失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 核销成功后联动开闸：payment → 网关 → device 内部接口 → GateAdapter（厂商通道）。
+     *
+     * <p>三个约束：
+     * <ol>
+     *   <li><b>必须在本地事务提交后</b>再下发 —— 否则闸机抬杆了而支付记录回滚，
+     *       就成了"免费放行"；</li>
+     *   <li><b>异步执行</b> —— 设备不回执时要等满 ack-timeout，同步会拖慢支付确认接口；</li>
+     *   <li><b>任何失败都不外抛</b> —— 钱已经到账，开闸失败只能留日志由运维处理，
+     *       绝不能让它影响入账结果。</li>
+     * </ol>
+     */
+    private void releaseGateOnPaid(PaymentRecord record) {
+        if (!releaseGateOnPayment) {
+            log.info("支付联动开闸已关闭（smart-parking.gate.release-on-payment=false），跳过 payNo={}",
+                    record.getPayNo());
+            return;
+        }
+        Runnable task = () -> {
+            try {
+                String url = gatewayUrl + "/api/device/internal/gate/release"
+                        + "?payNo=" + record.getPayNo()
+                        + "&orderId=" + record.getOrderId()
+                        + "&reason=" + java.net.URLEncoder.encode(
+                                "支付成功放行", java.nio.charset.StandardCharsets.UTF_8);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> resp = restTemplate.postForObject(
+                        java.net.URI.create(url), HttpEntity.EMPTY, Map.class);
+                Object dataObj = resp == null ? null : resp.get("data");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = dataObj instanceof Map ? (Map<String, Object>) dataObj : null;
+                if (data != null && Boolean.TRUE.equals(data.get("success"))) {
+                    log.info("[支付联动开闸] 成功 payNo={}, orderId={}, device={}, vendor={}, transport={}, 回执={}",
+                            record.getPayNo(), record.getOrderId(), data.get("deviceNo"),
+                            data.get("vendor"), data.get("transport"), data.get("gateAck"));
+                } else {
+                    log.warn("[支付联动开闸] 设备通道未受理 payNo={}, 返回={}", record.getPayNo(), data);
+                }
+            } catch (Exception e) {
+                log.warn("[支付联动开闸] 调用设备服务失败（不影响入账）payNo={}：{}",
+                        record.getPayNo(), e.getMessage());
+            }
+        };
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            GATE_EXECUTOR.submit(task);
+                        }
+                    });
+        } else {
+            GATE_EXECUTOR.submit(task);
         }
     }
 
@@ -267,7 +488,7 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
             String spaceNo = String.valueOf(spaceData.get("spaceNo"));
 
             // 3. 记录真实分润
-            java.math.BigDecimal ownerRatio = new java.math.BigDecimal("0.7");
+            BigDecimal ownerRatio = effectiveOwnerShareRatio(ownerShareRatio);
             java.math.BigDecimal[] split = splitShareAmount(record.getAmount(), ownerRatio);
             ShareIncome share = new ShareIncome();
             share.setPaymentId(record.getId());
@@ -335,6 +556,23 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
      *
      * <p>抽成静态方法是为了能被单测直接锁定，不需要构造整个 service 的依赖。
      */
+    /**
+     * 生效的分润比例：配置合法则用配置，否则回退默认值并告警。
+     *
+     * <p>合法区间是 (0, 1) 开区间 —— 0 表示业主一分不拿、1 表示物业一分不拿，
+     * 两者都说明配置写错了（多半是写成百分数 70 而不是 0.7）。
+     * 做成静态方法是为了让单测直接验证回退规则，不必启动 Spring 上下文。
+     */
+    static BigDecimal effectiveOwnerShareRatio(BigDecimal configured) {
+        if (configured == null || configured.signum() <= 0
+                || configured.compareTo(BigDecimal.ONE) >= 0) {
+            log.warn("分润比例配置非法（smart-parking.share.owner-ratio={}），回退默认值 {}；取值应形如 0.7",
+                    configured, DEFAULT_OWNER_SHARE_RATIO);
+            return DEFAULT_OWNER_SHARE_RATIO;
+        }
+        return configured;
+    }
+
     static BigDecimal[] splitShareAmount(BigDecimal total, BigDecimal ownerRatio) {
         BigDecimal owner = total.multiply(ownerRatio).setScale(2, RoundingMode.HALF_UP);
         return new BigDecimal[]{owner, total.subtract(owner)};
@@ -381,6 +619,12 @@ public class PaymentRecordServiceImpl extends ServiceImpl<PaymentRecordMapper, P
         this.updateById(record);
 
         Long orderId = record.getOrderId();
+        if (orderId == null) {
+            // 月卡流水不关联停车订单：退款只改本表状态并原路退回，
+            // 已生效的月卡权益不回滚（可能已使用，属人工处理范畴，不要在这里自动扣减）
+            log.warn("支付流水 {} 为月卡业务（bizType={}），跳过订单服务退款回调", payNo, record.getBizType());
+            return;
+        }
         // 本地事务提交后通知订单服务重置支付状态，避免本地回滚但远端已改
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(

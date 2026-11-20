@@ -1,6 +1,7 @@
 package com.smartparking.payment.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.common.core.domain.PageResult;
 import com.smartparking.common.core.domain.Result;
 import com.smartparking.common.core.exception.BizException;
@@ -44,7 +45,7 @@ public class PaymentRecordController {
      * {@code sign = MD5(payNo + "&" + secret)}，验签失败一律不置成功。
      * 真实微信/支付宝验签（RSA/证书链）在接入渠道时替换本方法即可。
      */
-    @Value("${smart-parking.payment.callback-secret:SmartParkingCallback2026}")
+    @Value("${smart-parking.payment.callback-secret:" + Constants.DEFAULT_CALLBACK_SECRET + "}")
     private String callbackSecret;
 
     /** 模拟支付开关：接入真实渠道后置 false，模拟端点整体下线（报告 P0-2 建议） */
@@ -66,6 +67,19 @@ public class PaymentRecordController {
         }
         PaymentRecord record = paymentRecordService.createPayment(orderId, userId, amount, payType);
         return Result.success(record);
+    }
+
+    @Operation(summary = "创建月卡支付流水")
+    @PostMapping("/monthly/create")
+    public Result<PaymentRecord> createMonthly(
+            @Parameter(description = "月卡订单ID") @RequestParam Long monthlyOrderId,
+            @Parameter(description = "支付方式（1微信 2支付宝 3现金）") @RequestParam Integer payType,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserId,
+            @RequestHeader(value = "X-User-Role", required = false) String currentRole) {
+        // 业主(role=0)只能为自己名下的月卡订单付款；金额与归属以车辆服务的订单为准
+        Long userId = "0".equals(currentRole) && currentUserId != null
+                ? Long.valueOf(currentUserId) : null;
+        return Result.success(paymentRecordService.createMonthlyPayment(monthlyOrderId, userId, payType));
     }
 
     @Operation(summary = "微信支付（模拟：扫码即支付成功）")

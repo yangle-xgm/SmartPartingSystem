@@ -147,4 +147,23 @@ public class DeviceController {
         deviceService.updateStatus(deviceNo, status);
         return Result.success();
     }
+
+    /**
+     * 支付成功联动开闸：payment 服务在核销成功后调用，指令经厂商适配器下发。
+     *
+     * <p>走 {@code /internal/**} 而非管理端接口，是为了让 payment 服务用
+     * {@code X-Internal-Token} 直连，不必伪造管理员 JWT（网关上 /internal/** 只认令牌）。
+     *
+     * <p>返回体用 {@code success} 字段表达"指令是否被通道受理"，HTTP 恒 200：
+     * 开闸失败不该让支付服务的调用按 4xx/5xx 走重试逻辑（钱已经收了）。
+     */
+    @Operation(summary = "支付成功联动开闸（内部接口，由 payment 服务核销成功后调用）")
+    @PostMapping("/internal/gate/release")
+    public Result<Map<String, Object>> releaseForPayment(
+            @Parameter(description = "支付流水号") @RequestParam(required = false) String payNo,
+            @Parameter(description = "订单ID") @RequestParam(required = false) String orderId,
+            @Parameter(description = "开闸原因（写入指令报文与日志）") @RequestParam(required = false) String reason,
+            @Parameter(description = "指定道闸编号；不传则自动挑选在线出口道闸") @RequestParam(required = false) String deviceNo) {
+        return Result.success(deviceService.releaseForPayment(payNo, orderId, reason, deviceNo));
+    }
 }
