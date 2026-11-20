@@ -7,7 +7,7 @@
 > 该路径段要求携带 `X-Internal-Token` Header（服务间约定，外部用户 JWT 无效）。
 >
 > 实现形态：`@Component` + `RestTemplate` + `@Value` 配置 URL（非 OpenFeign）。
-> 每个 provider 模块都有对应的 `*InternalApiContractTest`（`@WebMvcTest` + MockMvc）守护本清单，
+> 每个 provider 模块都有对应的 `*InternalApiContractTest`（standalone MockMvc + `MockitoExtension`）守护本清单，
 > **修改任何一侧（消费者传参 / 提供方签名 / Result 结构）必须先改本文件并同步测试**。
 
 ## 1. 契约总表
@@ -41,6 +41,10 @@
 | 24 | 订单/设备链路（入场推送） | notify | `POST /api/notify/internal/entry?userId=&plateNo=&spaceNo=` | type=1；content 含车牌与车位号 | `NotifyInternalApiContractTest` |
 | 25 | 订单/设备链路（出场推送） | notify | `POST /api/notify/internal/exit?userId=&plateNo=&duration=&amount=` | type=2；content 含时长与费用 | `NotifyInternalApiContractTest` |
 | 26 | 订单/支付链路（待支付提醒） | notify | `POST /api/notify/internal/payment?userId=&orderNo=&amount=` | type=3；content 含订单号与金额 | `NotifyInternalApiContractTest` |
+| 27 | payment `releaseGateOnPaid()`（支付核销后联动开闸） | device | `POST /api/device/internal/gate/release?payNo=&orderId=&reason=&deviceNo=` | 四个参数全部 `required=false`；**HTTP 恒 200**，通道是否受理看 `$.data.success`（false 时 `$.data.message` 给原因）；`deviceNo` 为空则由 provider 自动选在线出口道闸；开闸失败不得让调用方回滚入账 | `DeviceInternalApiContractTest` |
+| 28 | payment `createMonthlyPayment()`（建月卡支付流水前校验） | vehicle | `GET /api/vehicle/internal/monthly/info?monthlyOrderId=` | `$.data` 必须含 `id`/`amount`/`payStatus`/`userId`；**金额与归属以此为准**，前端传值一律忽略；`payStatus=1` 时支付服务拒绝重复支付；订单不存在时 `data` 缺省 | `MonthlyCardInternalApiContractTest` |
+| 29 | payment `confirmMonthlyPaid()`（月卡核销后续期） | vehicle | `POST /api/vehicle/internal/monthly/mark-paid?monthlyOrderId=&payNo=&transactionId=` | `payNo`/`transactionId` 均 `required=false`；**必须幂等**——已支付时返回同一 `message` 且不二次续期；`$.data.message` 供 H5 直接展示；支付服务调用失败要抛错（本地流水回滚为待支付，等渠道重试） | `MonthlyCardInternalApiContractTest` |
+| 30 | stats `getPeakHours()`（高峰时段，替代直查 `parking_order`） | order | `GET /api/order/internal/entry-count-by-hour?date=yyyy-MM-dd` | `$.data` 必须是数组 `[{hour:0-23, count:n}]` 且按 `hour` 升序（`List<Map>`）；失败由调用方降级为空列表，不得抛给管理端 | `OrderInternalApiContractTest` |
 
 ## 2. 统一响应契约（Result<T>）
 

@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 
 /**
- * 我的车位（按产权人查询）。
+ * 我的车位（按归属人（承租人）查询）。
  * 后端 GET /api/parking/space/my 在业主身份下会忽略 ownerId，直接用网关注入的身份。
  */
 export function getMySpaces() {

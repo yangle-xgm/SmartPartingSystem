@@ -21,7 +21,7 @@
 - **统一响应**：`Result<T>` / `PageResult<T>`（`common-core`）。错误码枚举 `ErrorCode`。
 - **新增 AI 模块契约**：`/api/ai/plate/recognize`（上传图识别车牌，provider=mock|baidu）；`/api/ai/chat`（智能客服）。
 - **新增业主自助服务契约（2026-11-17）**：`/api/vehicle/monthly/{quote,create,pay,orders}`（月卡报价/下单/支付/订单，支付幂等、重复支付被拒）；
-  `/api/payment/share-income/my`（共享收益按 `owner_id` 汇总）；`/api/parking/space/my`（本人产权车位）；`/api/parking/reserve/my`、`/api/parking/reserve/cancel`（我的预约/取消）；
+  `/api/payment/share-income/my`（共享收益按 `owner_id` 汇总）；`/api/parking/space/my`（本人承租车位）；`/api/parking/reserve/my`、`/api/parking/reserve/cancel`（我的预约/取消）；
   `/api/parking/space/{id}/share`（业主自助开关共享）。上述接口的身份一律取自网关注入的 `X-User-Id`，不接受前端传参。
 
 ## 数据库设计（统一单库 smart_parking，17 张表）
@@ -51,7 +51,10 @@
 - 索引已建：`idx_entry_time`、`idx_pay_status_time`、`idx_plate_no`、`idx_status_area` 等（见 `计划书.md` §4.3）。
 
 ## Open concerns（未解决问题 / 风险 — 必须人工确认）
-1. 🔴 构建在 `smart-parking-user` 中断（根因日志缺失），需本地 `mvn clean install` 复现定位。
+
+> **2026-11-20 核查更新**：下列 1 / 2 / 4 / 5 已关闭（构建全绿 16 模块、ai 模块已登记、218 用例 + CI 门禁、支付宝已走真实沙箱）；3 部分关闭（`monthly_card_order` 已补字段表与 Flyway `V4`，`invoice` 仍缺 ER 图）；6 新增：月卡支付绕过 payment 服务，收入/发票漏账（见 `docs/边界确认-2026-11-20.md` §6.2）。原文保留以留时间线。
+
+1. 🔴 构建在 `smart-parking-user` 中断（根因日志缺失），需本地 `mvn clean install` 复现定位。**（已关闭）**
 2. 🟠 `smart-parking-ai` 模块未在架构文档登记（端口/职责/部署方式不明确）。
 3. 🟠 增量表 `community/reservation/share_income/feedback/payment_reconciliation/monthly_card_order` 缺 ER 图与字段注释存档（`monthly_card_order` 已于 2026-11-18 补字段表，见上）。
 4. 🟠 11/12 后端模块零单元测试；无 CI；无监控闭环。
