@@ -39,6 +39,7 @@ public class SandboxGateSimulator {
 
     private final MqttTransport mqttTransport;
     private final GateAckRegistry ackRegistry;
+    private final GateSigner gateSigner;
 
     @Value("${smart-parking.device.simulator.enabled:true}")
     private boolean enabled;
@@ -70,7 +71,7 @@ public class SandboxGateSimulator {
                 return;
             }
             // 模拟真实设备的安全校验：签名不对一律不动作（防伪造开闸）
-            if (!GateSigner.verify(action, deviceNo, seq, sign)) {
+            if (!gateSigner.verify(action, deviceNo, seq, sign)) {
                 log.warn("[沙箱道闸] 指令验签失败，拒绝执行 device={}, cmd={}, seq={}", deviceNo, action, seq);
                 return;
             }
@@ -81,7 +82,7 @@ public class SandboxGateSimulator {
             ack.put("seq", seq);
             ack.put("result", "OK");
             ack.put("ts", System.currentTimeMillis());
-            ack.put("sign", GateSigner.sign("ACK", deviceNo, seq));
+            ack.put("sign", gateSigner.sign("ACK", deviceNo, seq));
             String ackJson = JSON.writeValueAsString(ack);
 
             mqttTransport.publish("device/gate/" + deviceNo + "/ack", ackJson, 1);

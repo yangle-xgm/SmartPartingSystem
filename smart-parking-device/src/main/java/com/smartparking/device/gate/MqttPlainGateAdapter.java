@@ -32,15 +32,15 @@ public class MqttPlainGateAdapter implements GateAdapter {
 
     @Override
     public GateResult open(Device device, String reason) {
-        return send(device, GateAction.OPEN);
+        return send(device, GateAction.OPEN, reason);
     }
 
     @Override
     public GateResult close(Device device) {
-        return send(device, GateAction.CLOSE);
+        return send(device, GateAction.CLOSE, null);
     }
 
-    private GateResult send(Device device, GateAction action) {
+    private GateResult send(Device device, GateAction action, String reason) {
         long start = System.currentTimeMillis();
         String topic = device.getMqttTopic() == null || device.getMqttTopic().isBlank()
                 ? "device/gate/" + device.getDeviceNo() + "/cmd"
@@ -65,6 +65,8 @@ public class MqttPlainGateAdapter implements GateAdapter {
         entry.put("time", java.time.LocalDateTime.now().toString());
         entry.put("deviceNo", device.getDeviceNo());
         entry.put("action", action.name());
+        // 与 sandbox 通道保持一致：reason 单独成字段，便于区分手动开闸与支付放行
+        entry.put("reason", reason);
         entry.put("seq", "-");
         entry.put("topic", topic);
         entry.put("transport", result.getTransport());

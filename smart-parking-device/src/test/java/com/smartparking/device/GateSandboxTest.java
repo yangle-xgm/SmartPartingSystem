@@ -1,6 +1,7 @@
 package com.smartparking.device;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartparking.common.core.constant.Constants;
 import com.smartparking.device.gate.GateAckRegistry;
 import com.smartparking.device.gate.GateAction;
 import com.smartparking.device.gate.GateAdapter;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -46,21 +48,48 @@ class GateSandboxTest {
 
     private MqttTransport transport;
     private GateAckRegistry registry;
+    private GateSigner signer;
 
     @BeforeEach
     void setUp() {
         transport = mock(MqttTransport.class);
         registry = new GateAckRegistry();
+        signer = new GateSigner(Constants.DEFAULT_GATE_SIGN_SALT);
     }
 
     @Test
     @DisplayName("指令签名：正确可验，篡改设备号即失败")
     void signRoundTrip() {
-        String sign = GateSigner.sign("OPEN", "GATE-A-001", "seq001");
-        assertTrue(GateSigner.verify("OPEN", "GATE-A-001", "seq001", sign));
-        assertFalse(GateSigner.verify("OPEN", "GATE-A-002", "seq001", sign));
-        assertFalse(GateSigner.verify("CLOSE", "GATE-A-001", "seq001", sign));
-        assertFalse(GateSigner.verify("OPEN", "GATE-A-001", "seq001", null));
+        String sign = signer.sign("OPEN", "GATE-A-001", "seq001");
+        assertTrue(signer.verify("OPEN", "GATE-A-001", "seq001", sign));
+        assertFalse(signer.verify("OPEN", "GATE-A-002", "seq001", sign));
+        assertFalse(signer.verify("CLOSE", "GATE-A-001", "seq001", sign));
+        assertFalse(signer.verify("OPEN", "GATE-A-001", "seq001", null));
+        assertFalse(signer.verify("OPEN", "GATE-A-001", "seq001", ""));
+    }
+
+    @Test
+    @DisplayName("签名盐可配置：换盐后同一指令签名不同，且旧签名验不过")
+    void customSaltChangesSignature() {
+        GateSigner custom = new GateSigner("my-own-random-salt-2026");
+
+        String defaultSign = signer.sign("OPEN", "GATE-A-001", "seq001");
+        String customSign = custom.sign("OPEN", "GATE-A-001", "seq001");
+
+        assertNotEquals(defaultSign, customSign, "盐不同，签名必须不同");
+        assertFalse(signer.verify("OPEN", "GATE-A-001", "seq001", customSign),
+                "用自定义盐签出的指令，不应被默认盐的验签接受");
+        assertFalse(custom.isDefaultSalt());
+        assertTrue(signer.isDefaultSalt());
+    }
+
+    @Test
+    @DisplayName("空白盐回退默认值，不会因为配了空串就变成无盐签名")
+    void blankSaltFallsBackToDefault() {
+        GateSigner blank = new GateSigner("   ");
+        assertTrue(blank.isDefaultSalt());
+        assertEquals(signer.sign("OPEN", "GATE-A-001", "seq001"),
+                blank.sign("OPEN", "GATE-A-001", "seq001"));
     }
 
     @Test
@@ -140,7 +169,7 @@ class GateSandboxTest {
     // ------------------------------------------------------------------
 
     private SandboxGateAdapter newAdapter(boolean strictAck) {
-        SandboxGateAdapter adapter = new SandboxGateAdapter(transport, registry);
+        SandboxGateAdapter adapter = new SandboxGateAdapter(transport, registry, signer);
         ReflectionTestUtils.setField(adapter, "ackTimeoutMs", 200L);
         ReflectionTestUtils.setField(adapter, "strictAck", strictAck);
         return adapter;

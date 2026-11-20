@@ -42,6 +42,7 @@ public class SandboxGateAdapter implements GateAdapter {
 
     private final MqttTransport mqttTransport;
     private final GateAckRegistry ackRegistry;
+    private final GateSigner gateSigner;
 
     @Value("${smart-parking.device.gate-ack-timeout-ms:1500}")
     private long ackTimeoutMs;
@@ -115,16 +116,19 @@ public class SandboxGateAdapter implements GateAdapter {
                     action.getLabel(), device.getDeviceNo(), action, seq, result.getLatencyMs());
         }
 
-        recordLog(device, action, seq, cmdTopic, payload, result);
+        recordLog(device, action, seq, cmdTopic, payload, reason, result);
         return result;
     }
 
     private void recordLog(Device device, GateAction action, String seq, String topic,
-                           String payload, GateResult result) {
+                           String payload, String reason, GateResult result) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("time", LocalDateTime.now().toString());
         entry.put("deviceNo", device.getDeviceNo());
         entry.put("action", action.name());
+        // reason 单独提一层：原来只埋在 payload 的 JSON 串里，排障要先解字符串才能区分
+        // 「手动开闸」和「支付成功放行」，管理端也没法直接展示
+        entry.put("reason", reason);
         entry.put("seq", seq);
         entry.put("topic", topic);
         entry.put("transport", result.getTransport());
@@ -154,7 +158,7 @@ public class SandboxGateAdapter implements GateAdapter {
         if (reason != null && !reason.isBlank()) {
             body.put("reason", reason);
         }
-        body.put("sign", GateSigner.sign(action.name(), device.getDeviceNo(), seq));
+        body.put("sign", gateSigner.sign(action.name(), device.getDeviceNo(), seq));
         try {
             return JSON.writeValueAsString(body);
         } catch (Exception e) {
@@ -166,6 +170,7 @@ public class SandboxGateAdapter implements GateAdapter {
 
     /**
      * 指令签名：真实厂商协议普遍要求 cmd+设备号+序号 带签名，防止重放/伪造开闸。
-     * 沙箱用固定盐做 MD5 演示报文结构；接真实厂商时替换为厂商算法/密钥。
+     * 沙箱用可配置盐做 MD5 演示报文结构；接真实厂商时替换为厂商算法/密钥，盐由
+     * {@code smart-parking.device.gate-sign-salt} 注入，无需改这一处代码。
      */
 }

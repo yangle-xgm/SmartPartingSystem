@@ -89,6 +89,10 @@ smart-parking:
     gate-vendor: ${SP_GATE_VENDOR:sandbox}
     # 等待设备 ACK 的超时（毫秒），超时只告警不阻断放行
     gate-ack-timeout-ms: 1500
+    # 指令签名盐：sign = MD5(cmd|deviceNo|seq|salt)。
+    # 默认值仅用于沙箱演示；接真实道闸必须通过 SP_GATE_SIGN_SALT 换成随机串。
+    # strict-secrets=true 时仍在用默认值 → 拒绝启动（DeviceStrictModeGuard）。
+    gate-sign-salt: ${SP_GATE_SIGN_SALT:SmartParkingGateSandbox}
     # 严格模式：true 表示没收到 ACK 就判定失败（现场设备真实支持回执时才开）
     strict-ack: false
     simulator:

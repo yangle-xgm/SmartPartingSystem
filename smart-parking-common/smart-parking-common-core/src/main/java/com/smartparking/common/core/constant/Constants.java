@@ -122,6 +122,15 @@ public class Constants {
      */
     public static final String DEFAULT_CALLBACK_SECRET = "SmartParkingCallback2026";
 
+    /**
+     * 沙箱道闸指令签名的内置开发默认盐（{@code sign = MD5(cmd|deviceNo|seq|salt)}）。
+     *
+     * <p>它算法公开写在代码里，只用于让沙箱链路能在无硬件时跑通「下发→验签→回执」。
+     * 接真实道闸时要么换成厂商算法，要么至少换一个随机盐；{@code strict-secrets=true}
+     * 时仍在使用该默认值即拒绝启动，避免带着公开盐上线（等于谁都能伪造开闸指令）。
+     */
+    public static final String DEFAULT_GATE_SIGN_SALT = "SmartParkingGateSandbox";
+
     private Constants() {
     }
 }
