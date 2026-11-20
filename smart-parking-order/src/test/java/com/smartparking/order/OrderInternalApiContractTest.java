@@ -199,6 +199,24 @@ class OrderInternalApiContractTest {
     }
 
     @Test
+    @DisplayName("GET /internal/entry-count-by-hour：stats 高峰时段改为调本接口，data 为 [{hour,count}]")
+    void entryCountByHour_returnsHourlyRows() throws Exception {
+        java.util.List<Map<String, Object>> rows = new java.util.ArrayList<>();
+        rows.add(new LinkedHashMap<>(Map.of("hour", 8, "count", 12)));
+        rows.add(new LinkedHashMap<>(Map.of("hour", 18, "count", 30)));
+        when(parkingOrderService.entryCountByHour(java.time.LocalDate.of(2026, 11, 20))).thenReturn(rows);
+
+        mockMvc.perform(get("/api/order/internal/entry-count-by-hour").param("date", "2026-11-20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].hour").value(8))
+                .andExpect(jsonPath("$.data[1].count").value(30));
+
+        verify(parkingOrderService).entryCountByHour(java.time.LocalDate.of(2026, 11, 20));
+    }
+
+    @Test
     @DisplayName("POST /internal/confirm-payment：缺 orderId 时转 Result.fail（消费者按 code!=200 降级）")
     void confirmPayment_missingOrderId_returnsFailContract() throws Exception {
         mockMvc.perform(post("/api/order/internal/confirm-payment").param("amount", "25.50"))

@@ -72,6 +72,14 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
     @Value("${smart-parking.parking-url:http://localhost:8082}")
     private String parkingUrl;
 
+    /**
+     * 出场信用放行额度（坏账容忍上限）：未支付且应付不超过该值时先抬杆、后付费
+     * （出口不堵，欠费由 ArrearageScanTask 催缴/记欠费/拉黑）；超过该值道闸保持关闭。
+     * 实际生效值见 {@link #effectiveCreditLimit}：不会低于该订单规则的首个计费单位。
+     */
+    @Value("${smart-parking.gate.credit-limit-amount:6.00}")
+    private BigDecimal creditLimitAmount;
+
     private final RestTemplate restTemplate = buildRestTemplate();
 
     /** 车位分配轮询计数器（设备入场均衡分配） */
@@ -381,7 +389,7 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
                     "计费规则已不存在，无法结算（可由门岗走人工放行并事后补录）");
         }
 
-        // 月租车（规则 vehicleType=2）：停在自己的固定车位 → 包月已含，应收 0 元；
+        // 月租车（规则 vehicleType=2）：停在自己承租的固定车位 → 租金已含在月卡里，应收 0 元；
         // 月租车停他人车位（含临停车位）→ 按临停费率计时收费
         if (rule.getMonthlyPrice() != null && Integer.valueOf(2).equals(rule.getVehicleType())) {
             boolean parkedOnOwnSpace = false;
@@ -619,6 +627,16 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
                 result.put("message", "识别不清晰，请人工确认（相似车牌：" + recognize.get("suggestList") + "）");
                 return result;
             }
+            // 车辆服务对黑名单车辆会置 recognized=false 并回传原因：直接透传并拦停，
+            // 不能当"未注册车辆"继续走访客白名单，否则欠费黑名单形同虚设。
+            Object blockReason = recognize.get("message");
+            if (blockReason != null && StringUtils.hasText(String.valueOf(blockReason))) {
+                result.put("message", String.valueOf(blockReason));
+                auditClient.record(null, null, "入场拦截", "POST /api/order/internal/device-entry",
+                        java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "deviceNo", deviceNo,
+                                "reason", String.valueOf(blockReason)), false);
+                return result;
+            }
             // 未注册车辆：尝试命中访客白名单（方案B：业主录入车牌，入场自动识别放行）
             try {
                 ParkingOrder visitorOrder = visitorInviteService.entryByPlateNo(plateNo);
@@ -673,7 +691,57 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
     }
 
     /**
-     * 设备联动出场：出口摄像头识别车牌 → 自动结算 → 释放车位
+     * 出场分级放行判定（纯函数，便于逐分支单测）：
+     * 已支付、免费、或未支付但金额不超过信用额度 → 放行（先出场后付费，出口不堵）；
+     * 未支付且金额超过额度 → 不抬杆，要求当场扫码支付。
+     */
+    static boolean canRelease(Integer payStatus, BigDecimal amount, BigDecimal creditLimitAmount) {
+        if (Integer.valueOf(Constants.PAY_STATUS_PAID).equals(payStatus)) {
+            return true;
+        }
+        if (amount == null || amount.signum() <= 0) {
+            return true;
+        }
+        return amount.compareTo(creditLimitAmount) <= 0;
+    }
+
+    /**
+     * 生效的信用额度 = max(配置兜底值, 该规则的单日封顶)。
+     *
+     * <p>口径为何取「单日封顶」：本系统服务的是小区，停车时长普遍是数小时到一整天，
+     * 商场那套「停 1~2 小时」的量级不适用 —— 若额度按小的固定值算，业主回家停一晚就会超，
+     * 分级放行等于形同虚设，出口天天堵。以单日封顶为额度，语义变成
+     * <b>「一天以内的停车先出场后付，跨日累积超过一天封顶才要求当场结清」</b>：
+     * 既覆盖业主日常与访客过夜，也能拦住多日占用/疑似弃车；规则调价自动跟随，无需回头改配置。
+     */
+    private BigDecimal effectiveCreditLimit(Long billingRuleId) {
+        if (billingRuleId == null) {
+            return creditLimitAmount;
+        }
+        BillingRule rule = billingRuleService.getById(billingRuleId);
+        if (rule == null) {
+            return creditLimitAmount;
+        }
+        return effectiveCreditLimit(creditLimitAmount, rule.getDailyCap(), rule.getWeekendDailyCap());
+    }
+
+    /**
+     * 纯函数便于单测：取「平峰日封顶」与「周末日封顶」中较大者，无封顶的规则（如月租）
+     * 回退到配置兜底值。取大是为了避免周末费率更高时、节假日出场反而被额度卡住。
+     */
+    static BigDecimal effectiveCreditLimit(BigDecimal configured, BigDecimal dailyCap, BigDecimal weekendDailyCap) {
+        BigDecimal cap = dailyCap;
+        if (weekendDailyCap != null && (cap == null || weekendDailyCap.compareTo(cap) > 0)) {
+            cap = weekendDailyCap;
+        }
+        if (cap == null || cap.signum() <= 0) {
+            return configured;
+        }
+        return configured.max(cap);
+    }
+
+    /**
+     * 设备联动出场：出口摄像头识别车牌 → 自动结算 → 释放车位（是否抬杆按分级放行策略）
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -707,16 +775,38 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
                                 "needManualRelease", true), false);
                 return result;
             }
+            // 先结算（锁定金额、释放车位），再按支付状态决定抬不抬杆。
+            // 结算与放行解耦的好处：金额不因"过一会儿再付"而变化，也不会重复计费；
+            // 未付款被拦时订单已是「待支付」，扫码付款后由支付成功事件抬杆，天然衔接。
             ParkingOrder completed = completeOrder(order.getOrderNo());
-            result.put("success", true);
+            BigDecimal amount = completed.getAmount() == null ? BigDecimal.ZERO : completed.getAmount();
+            boolean paid = Integer.valueOf(Constants.PAY_STATUS_PAID).equals(completed.getPayStatus());
+            boolean free = amount.signum() <= 0;
+            BigDecimal effectiveLimit = effectiveCreditLimit(order.getBillingRuleId());
+            boolean release = canRelease(completed.getPayStatus(), amount, effectiveLimit);
+
+            result.put("success", release);
             result.put("orderNo", completed.getOrderNo());
-            result.put("amount", completed.getAmount());
+            result.put("amount", amount);
             result.put("spaceNo", completed.getSpaceNo());
-            result.put("message", "出场结算完成");
-            auditClient.record(null, null, "设备联动出场", "POST /api/order/internal/device-exit",
+            if (release) {
+                if (paid) {
+                    result.put("message", "出场结算完成（已支付）");
+                } else if (free) {
+                    result.put("message", "出场结算完成（无需支付）");
+                } else {
+                    result.put("message", "已信用放行，请在 24 小时内完成支付 ¥" + amount);
+                }
+            } else {
+                result.put("needPay", true);
+                result.put("payTip", "应付 ¥" + amount + "，请扫码支付后出场");
+                result.put("message", "未支付且超过信用额度 ¥" + effectiveLimit + "，道闸保持关闭");
+            }
+            auditClient.record(null, null, release ? "设备联动出场" : "设备联动出场（未付费拦截）",
+                    "POST /api/order/internal/device-exit",
                     java.util.Map.of("plateNo", AesUtils.maskPlate(plateNo), "deviceNo", deviceNo,
                             "orderNo", completed.getOrderNo(),
-                            "amount", completed.getAmount() == null ? 0 : completed.getAmount()), true);
+                            "amount", amount, "released", release), true);
             return result;
         } catch (Exception e) {
             log.error("设备联动出场失败：plateNo={}, err={}", plateNo, e.getMessage());
@@ -788,5 +878,28 @@ public class ParkingOrderServiceImpl extends ServiceImpl<ParkingOrderMapper, Par
 
     private Map<String, Object> parseJson(String body) throws Exception {
         return new com.fasterxml.jackson.databind.ObjectMapper().readValue(body, Map.class);
+    }
+
+    /**
+     * 某日各小时入场量。
+     *
+     * <p>统计服务此前直查 {@code parking_order}（跨 owns 表），表结构一改就静默失效；
+     * 改为由订单域自己聚合后经 {@code /internal} 提供，边界回到「谁的表谁查」。
+     * 按 {@code entry_time} 的日区间过滤（{@code [00:00, 次日 00:00)}），
+     * 不用 {@code DATE(entry_time)=?} 是为了让索引可用。
+     */
+    @Override
+    public List<Map<String, Object>> entryCountByHour(java.time.LocalDate date) {
+        if (date == null) {
+            return java.util.Collections.emptyList();
+        }
+        return this.baseMapper.selectMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<ParkingOrder>()
+                        .select("HOUR(entry_time) AS `hour`", "COUNT(*) AS `count`")
+                        .eq("is_deleted", 0)
+                        .ge("entry_time", date.atStartOfDay())
+                        .lt("entry_time", date.plusDays(1).atStartOfDay())
+                        .groupBy("HOUR(entry_time)")
+                        .orderByAsc("`hour`"));
     }
 }

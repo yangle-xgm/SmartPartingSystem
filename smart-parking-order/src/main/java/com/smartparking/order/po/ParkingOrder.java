@@ -56,4 +56,10 @@ public class ParkingOrder extends BaseEntity {
 
     @Schema(description = "订单状态（0进行中 1已完成 2已取消）")
     private Integer status;
+
+    @Schema(description = "待支付提醒发送时间（出场后24h催缴，NULL=未发）")
+    private LocalDateTime remindTime;
+
+    @Schema(description = "欠费标记（0正常 1已记欠费）")
+    private Integer arrearStatus;
 }

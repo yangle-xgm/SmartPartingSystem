@@ -98,4 +98,14 @@ public interface ParkingOrderService extends IService<ParkingOrder> {
      * @return 结算结果（success/orderNo/amount/spaceNo；无进行中订单时不结算）
      */
     Map<String, Object> deviceExit(String plateNo, String deviceNo);
+
+    /**
+     * 某日各小时入场量（内部接口，统计服务「高峰时段」使用）。
+     *
+     * <p>放在订单服务是因为 {@code parking_order} 属于本域 —— 统计服务不得直查别人的表
+     * （此前 {@code ParkingStatsMapper} 直接 {@code FROM parking_order}，表结构一变就静默失效）。
+     *
+     * @return [{hour: 0-23, count: n}]，按小时升序
+     */
+    java.util.List<Map<String, Object>> entryCountByHour(java.time.LocalDate date);
 }

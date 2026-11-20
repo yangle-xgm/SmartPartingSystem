@@ -70,4 +70,19 @@ public class VehicleClient {
             return List.of();
         }
     }
+
+    /**
+     * 更新车辆状态：status=1 即黑名单（车辆服务 recognize 处会直接拒绝入场）。
+     * 失败只记日志，下一轮扫描会重试。
+     */
+    public boolean updateStatus(Long vehicleId, Integer status) {
+        try {
+            String url = vehicleUrl + "/api/vehicle/internal/" + vehicleId + "/status?status=" + status;
+            restTemplate.put(java.net.URI.create(url), null);
+            return true;
+        } catch (Exception e) {
+            log.warn("更新车辆状态失败 vehicleId={}, status={}：{}", vehicleId, status, e.getMessage());
+            return false;
+        }
+    }
 }

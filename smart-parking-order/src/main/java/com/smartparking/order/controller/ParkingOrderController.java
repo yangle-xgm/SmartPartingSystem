@@ -222,6 +222,13 @@ public class ParkingOrderController {
                 .eq(com.smartparking.order.po.ParkingOrder::getStatus, com.smartparking.common.core.constant.Constants.ORDER_STATUS_ONGOING)));
     }
 
+    @Operation(summary = "某日各小时入场量（内部接口，统计服务高峰时段使用）")
+    @GetMapping("/internal/entry-count-by-hour")
+    public Result<java.util.List<java.util.Map<String, Object>>> entryCountByHour(
+            @Parameter(description = "日期 yyyy-MM-dd") @RequestParam String date) {
+        return Result.success(parkingOrderService.entryCountByHour(java.time.LocalDate.parse(date)));
+    }
+
     @Operation(summary = "设备联动出场（内部接口，出口摄像头识别后调用）")
     @PostMapping("/internal/device-exit")
     public Result<Map<String, Object>> deviceExit(

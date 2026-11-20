@@ -78,6 +78,21 @@ smart-parking:
   parking-url: http://localhost:8082
   # 用户服务地址（操作审计）
   audit-url: http://localhost:8081
+  # 通知服务地址（待支付催缴）
+  notify-url: http://localhost:8086
+  # 出场分级放行：实际生效额度 = max(本兜底值, 该计费规则的单日封顶)。
+  # 本值只在规则没有日封顶（如月租）时生效 —— 小区停车时长以天计，额度必须跟单日封顶走，
+  # 否则「按时长阈值」会把业主日常停车整类拦在出口。
+  # 当前规则：临停 2.00/h 封顶 15、新能源 1.50/h 封顶 15、访客 1.00/h 封顶 15
+  # （不办月卡的业主月量级约 450 元，月卡 300 元仍保留价差但不构成惩罚性定价）。
+  gate:
+    credit-limit-amount: ${SP_GATE_CREDIT_LIMIT:6.00}
+  # 欠费策略：出场后 24h 催缴、48h 记欠费，欠费超限列入车辆黑名单（status=1，入场即拦）
+  arrearage:
+    remind-after-hours: ${SP_ARREAR_REMIND_HOURS:24}
+    arrear-after-hours: ${SP_ARREAR_HOURS:48}
+    count-limit: ${SP_ARREAR_COUNT_LIMIT:3}
+    amount-limit: ${SP_ARREAR_AMOUNT_LIMIT:100.00}
 
 # ============ 可观测性：暴露 Prometheus 指标 ============
 management:
