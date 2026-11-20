@@ -37,4 +37,12 @@ public interface ParkingStatsService extends IService<ParkingStats> {
      * 更新统计数据（由MQ消息触发）
      */
     void updateStats(String type, Map<String, Object> data);
+
+    /**
+     * 把当天统计行的车位总数/占用数校准为车位服务的实时值。
+     *
+     * <p>车位数只在有车进出时才会回填，车位增删后若当天没有进出场事件，
+     * {@code total_spaces} 会一直停在旧值（占用率分母偏大）。由定时任务周期调用。
+     */
+    void refreshTodaySpaceCounts();
 }

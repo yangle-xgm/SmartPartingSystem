@@ -112,7 +112,8 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
             byDate.put(item.getStatDate(), item);
         }
         int[] live = querySpaceCounts();
-        int fallbackTotal = live != null && live[0] > 0 ? live[0] : currentTotalSpaces(statsList);
+        boolean liveOk = live != null && live[0] > 0;
+        int fallbackTotal = liveOk ? live[0] : currentTotalSpaces(statsList);
         int liveOccupied = live != null ? Math.max(0, live[1]) : 0;
         LocalDate today = LocalDate.now();
 
@@ -133,6 +134,13 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
                 }
                 if (row.getOccupiedSpaces() != null) {
                     occupied = row.getOccupiedSpaces();
+                }
+                // 今天的行会被历史数据"冻住"：total_spaces 只在有车进出时才回填，
+                // 车位软删后若当天再没有进出场事件，分母就一直停在旧值（实测 89 vs 实际 87）。
+                // 车位服务能答上来时以实时值为准 —— 今天的占用率本来就该是"现在"的口径。
+                if (day.equals(today) && liveOk) {
+                    total = live[0];
+                    occupied = Math.min(liveOccupied, total);
                 }
             } else if (day.equals(today) && fallbackTotal > 0) {
                 occupied = Math.min(liveOccupied, fallbackTotal);
@@ -231,7 +239,43 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
 
         this.saveOrUpdate(stats);
 
-        // 清除缓存（占用率缓存键带日期后缀，需 keys 通配匹配；delete 单键不支持 *）
+        evictStatsCaches();
+    }
+
+    /**
+     * 定时把当天统计行的车位数刷新为实时值。
+     *
+     * <p>为什么需要它：{@code backfillSpaceCounts} 只在「有车进出」时被触发，
+     * 所以「删掉一个车位、当天再没有车进出」这个组合会让 {@code total_spaces} 永远停在旧值
+     * （实测 89 vs 实际 87，占用率分母偏大）。读取侧已经优先取实时值兜底，
+     * 这里再把落库值也纠正过来，历史图表与 SQL 直查才不会继续看到漂移。
+     *
+     * <p>行为保守：今天没有统计行就什么都不做 —— 不为了刷新车位数凭空造一行空数据。
+     */
+    @Override
+    public void refreshTodaySpaceCounts() {
+        ParkingStats stats = this.getOne(new LambdaQueryWrapper<ParkingStats>()
+                .eq(ParkingStats::getStatDate, LocalDate.now()));
+        if (stats == null) {
+            return;
+        }
+        Integer beforeTotal = stats.getTotalSpaces();
+        Integer beforeOccupied = stats.getOccupiedSpaces();
+        backfillSpaceCounts(stats);
+        boolean changed = !java.util.Objects.equals(beforeTotal, stats.getTotalSpaces())
+                || !java.util.Objects.equals(beforeOccupied, stats.getOccupiedSpaces());
+        if (!changed) {
+            return;
+        }
+        this.updateById(stats);
+        // 占用率按日期缓存，车位总数一变所有区间的分母都受影响，连带清掉
+        evictStatsCaches();
+        log.info("统计行车位数已校准：total {} → {}, occupied {} → {}",
+                beforeTotal, stats.getTotalSpaces(), beforeOccupied, stats.getOccupiedSpaces());
+    }
+
+    /** 清除看板与占用率缓存（占用率键带日期后缀，需 keys 通配；delete 单键不支持 *） */
+    private void evictStatsCaches() {
         redisTemplate.delete(DASHBOARD_KEY);
         try {
             java.util.Set<String> occupancyKeys = redisTemplate.keys(OCCUPANCY_KEY + ":*");
