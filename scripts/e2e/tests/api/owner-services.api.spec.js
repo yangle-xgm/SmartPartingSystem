@@ -1,9 +1,10 @@
 // @ts-check
 /**
  * 业主自助服务接口契约（本轮新增）：
- *   1. 月卡充值：报价 → 下单 → 支付 → 有效期延长，且重复支付/越权支付被拒
+ *   1. 月卡充值：报价 → 下单 → 建支付流水 → 核销续期，且重复支付/越权支付被拒
+ *      （月卡与停车订单共用 payment_record，收入统计/发票/对账才不漏账）
  *   2. 车位共享：业主只能开关自己名下的车位，收益按 7:3 分润
- *   3. 车位预约：预约不得篡改车位产权，前端传入的 userId 不可信
+ *   3. 车位预约：预约不得篡改车位归属人，前端传入的 userId 不可信
  *
  * 这些能力此前「后端有接口、前端无入口」，回归用例保证两端契约同时成立。
  */
@@ -54,43 +55,58 @@ test.describe('月卡充值 · 报价与支付', () => {
     const original = sql(`SELECT monthly_expire FROM vehicle WHERE id=${VEHICLE_ID}`);
     expect(original, '测试车辆应已有月卡到期时间').not.toBe('');
 
-    let orderNo = '';
+    let monthlyOrderId = '';
     try {
+      // 1) 下单：锁定月单价与充值后的到期承诺
       const created = await request.post('/api/vehicle/monthly/create', {
         headers: auth(token),
         params: { vehicleId: VEHICLE_ID, months: 1, payType: 1 },
       });
       const createBody = await created.json();
       expect(createBody.code).toBe(200);
-      orderNo = createBody.data.orderNo;
-      expect(orderNo, '下单应返回月卡订单号').toBeTruthy();
+      monthlyOrderId = createBody.data.id;
+      expect(monthlyOrderId, '下单应返回月卡订单ID').toBeTruthy();
       expect(createBody.data.payStatus).toBe(0);
 
-      const paid = await request.post('/api/vehicle/monthly/pay', {
+      // 2) 建支付流水：月卡纳入 payment_record（收入统计/发票/对账的唯一口径），
+      //    金额必须由车辆服务的订单决定，不取前端传值
+      const payCreated = await request.post('/api/payment/monthly/create', {
         headers: auth(token),
-        params: { orderNo },
+        params: { monthlyOrderId, payType: 1 },
       });
-      const payBody = await paid.json();
-      expect(payBody.code, `支付失败: ${payBody.message}`).toBe(200);
-      expect(payBody.data.expireAfter).toBeTruthy();
+      const payBody = await payCreated.json();
+      expect(payBody.code, `建支付流水失败: ${payBody.message}`).toBe(200);
+      expect(payBody.data.bizType).toBe(2);
+      expect(Number(payBody.data.amount)).toBe(Number(createBody.data.amount));
+      const payNo = payBody.data.payNo;
+      expect(payNo, '建流水应返回支付流水号').toBeTruthy();
 
-      // 库里到期时间必须与订单承诺一致
+      // 3) 核销：paymentSuccess 按月卡分派 → 通知车辆服务续期
+      const paid = await request.post('/api/payment/wechat/pay', {
+        headers: auth(token),
+        params: { payNo },
+      });
+      const paidBody = await paid.json();
+      expect(paidBody.code, `支付失败: ${paidBody.message}`).toBe(200);
+
+      // 4) 库里到期时间必须与下单时的承诺一致（未经支付不得延长）
       const after = sql(`SELECT DATE_FORMAT(monthly_expire,'%Y-%m-%d %H:%i:%s') FROM vehicle WHERE id=${VEHICLE_ID}`);
       expect(new Date(after.replace(' ', 'T')).getTime())
-        .toBe(new Date(payBody.data.expireAfter).getTime());
+        .toBe(new Date(createBody.data.expireAfter).getTime());
 
-      // 幂等：同一订单二次支付必须被拒，且不能再次延长
-      const again = await request.post('/api/vehicle/monthly/pay', {
+      // 5) 幂等：已支付的月卡订单再次建流水必须被拒，且不能再次延长
+      const again = await request.post('/api/payment/monthly/create', {
         headers: auth(token),
-        params: { orderNo },
+        params: { monthlyOrderId, payType: 1 },
       });
       const againBody = await again.json();
       expect(againBody.code).toBe(5402);
       const afterAgain = sql(`SELECT DATE_FORMAT(monthly_expire,'%Y-%m-%d %H:%i:%s') FROM vehicle WHERE id=${VEHICLE_ID}`);
       expect(afterAgain).toBe(after);
     } finally {
-      // 还原月卡到期时间并清掉本轮产生的订单，保持演示库基线
+      // 还原月卡到期时间并清掉本轮产生的订单与流水，保持演示库基线
       sql(`UPDATE vehicle SET monthly_expire='${original}', type=2 WHERE id=${VEHICLE_ID}`);
+      sql(`DELETE FROM payment_record WHERE biz_type=2 AND biz_id IN (SELECT id FROM monthly_card_order WHERE vehicle_id=${VEHICLE_ID})`);
       sql(`DELETE FROM monthly_card_order WHERE vehicle_id=${VEHICLE_ID}`);
     }
   });
@@ -109,6 +125,25 @@ test.describe('月卡充值 · 报价与支付', () => {
       params: { vehicleId: VEHICLE_ID, months: 1, payType: 1 },
     });
     expect((await create.json()).code).toBe(403);
+
+    // 张三建一笔待支付月卡订单，赵六不得替它创建支付流水（否则可用他人流水续自己的卡）
+    const token = await login(request, OWNER);
+    const mine = await request.post('/api/vehicle/monthly/create', {
+      headers: auth(token),
+      params: { vehicleId: VEHICLE_ID, months: 1, payType: 1 },
+    });
+    const mineBody = await mine.json();
+    expect(mineBody.code).toBe(200);
+    try {
+      const cross = await request.post('/api/payment/monthly/create', {
+        headers: auth(otherToken),
+        params: { monthlyOrderId: mineBody.data.id, payType: 1 },
+      });
+      expect((await cross.json()).code).toBe(403);
+    } finally {
+      sql(`DELETE FROM payment_record WHERE biz_type=2 AND biz_id=${mineBody.data.id}`);
+      sql(`DELETE FROM monthly_card_order WHERE id=${mineBody.data.id}`);
+    }
   });
 });
 
@@ -148,7 +183,7 @@ test.describe('车位共享 · 归属校验与分润', () => {
     }
   });
 
-  test('我的车位只返回本人产权车位', async ({ request }) => {
+  test('我的车位只返回本人归属车位', async ({ request }) => {
     const token = await login(request, OWNER);
     const res = await request.get('/api/parking/space/my', { headers: auth(token) });
     const body = await res.json();
@@ -186,13 +221,13 @@ test.describe('车位共享 · 归属校验与分润', () => {
   });
 });
 
-test.describe('车位预约 · 产权与身份', () => {
-  test('预约不篡改车位产权，取消后产权仍在', async ({ request }) => {
+test.describe('车位预约 · 归属与身份', () => {
+  test('预约不篡改车位归属人，取消后归属仍在', async ({ request }) => {
     const adminToken = await login(request);
     const token = await login(request, OWNER);
     const { id: spaceId, spaceNo } = await createTestSpace(request, adminToken, 'E2ER');
 
-    // 给测试车位设一个产权人，模拟业主固定车位
+    // 给测试车位设一个归属人，模拟业主固定车位
     sql(`UPDATE parking_space SET owner_id=1001, type=0 WHERE id=${spaceId}`);
 
     try {
@@ -206,7 +241,7 @@ test.describe('车位预约 · 产权与身份', () => {
       });
       expect((await reserve.json()).code).toBe(200);
 
-      // 预约只改状态，产权必须保持 1001（历史实现会把 owner_id 改成预约人）
+      // 预约只改状态，归属人必须保持 1001（历史实现会把 owner_id 改成预约人）
       expect(sql(`SELECT status FROM parking_space WHERE id=${spaceId}`)).toBe('2');
       expect(sql(`SELECT owner_id FROM parking_space WHERE id=${spaceId}`)).toBe('1001');
 
@@ -221,7 +256,7 @@ test.describe('车位预约 · 产权与身份', () => {
       });
       expect((await cancel.json()).code).toBe(200);
       expect(sql(`SELECT status FROM parking_space WHERE id=${spaceId}`)).toBe('0');
-      // 取消后产权仍必须保留
+      // 取消后归属人仍必须保留
       expect(sql(`SELECT owner_id FROM parking_space WHERE id=${spaceId}`)).toBe('1001');
     } finally {
       cleanupTestData(spaceNo);

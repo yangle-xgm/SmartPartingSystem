@@ -75,7 +75,7 @@ test.describe('网关 RBAC · 业主不可触达管理端资源', () => {
     const spaceId = sql(
       `SELECT id FROM parking_space WHERE owner_id=${ownerId} AND is_deleted=0 ORDER BY id LIMIT 1`,
     );
-    expect(spaceId, '前置：张三名下需有产权车位').toBeTruthy();
+    expect(spaceId, '前置：张三名下需有归属车位').toBeTruthy();
 
     const res = await request.put(`/api/parking/space/${spaceId}/share`, {
       headers: auth(token),
