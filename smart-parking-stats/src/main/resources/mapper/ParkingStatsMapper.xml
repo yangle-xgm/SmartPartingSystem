@@ -16,12 +16,8 @@
         WHERE stat_date BETWEEN #{startDate} AND #{endDate} AND is_deleted = 0
     </select>
 
-    <!-- 按小时统计入场数量（用于高峰时段分析） -->
-    <select id="selectEntryCountByHour" resultType="java.util.HashMap">
-        SELECT HOUR(entry_time) AS hour, COUNT(*) AS count
-        FROM parking_order
-        WHERE DATE(entry_time) = #{date} AND is_deleted = 0
-        GROUP BY HOUR(entry_time)
-        ORDER BY hour
-    </select>
+    <!--
+      原「按小时统计入场数量」直查 parking_order（订单域 owns 表），违反服务边界。
+      已改为调用 order 服务 /api/order/internal/entry-count-by-hour，见 getPeakHours()。
+    -->
 </mapper>

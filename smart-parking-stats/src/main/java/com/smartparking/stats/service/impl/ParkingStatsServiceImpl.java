@@ -177,7 +177,22 @@ public class ParkingStatsServiceImpl extends ServiceImpl<ParkingStatsMapper, Par
 
     @Override
     public List<Map<String, Object>> getPeakHours(LocalDate date) {
-        return this.baseMapper.selectEntryCountByHour(date);
+        // parking_order 属于订单域，统计服务不直查别人的表：改调 order /internal，
+        // 表结构变更的影响面收敛在 owner 一侧（此前本服务直接 FROM parking_order）。
+        try {
+            String url = orderUrl + "/api/order/internal/entry-count-by-hour?date=" + date;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
+            Object data = resp == null ? null : resp.get("data");
+            if (data instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> rows = (List<Map<String, Object>>) data;
+                return rows;
+            }
+        } catch (Exception e) {
+            log.warn("查询高峰时段失败（date={}）：{}", date, e.getMessage());
+        }
+        return java.util.Collections.emptyList();
     }
 
     @Override
