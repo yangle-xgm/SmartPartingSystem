@@ -16,10 +16,13 @@ const POLL_TIMES = 40 // 最多等 60 秒
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** 当前页完整地址，作为付款后的回跳地址（配置里的 return-url 是固定的本机地址） */
-function currentReturnUrl() {
-  const { origin, pathname, search } = window.location
-  return origin + pathname + (search || '')
+/**
+ * 当前页完整地址，作为付款后的回跳地址（配置里的 return-url 是固定的本机地址）。
+ * 带上 payNo：回跳后的页面据此补查一次到账（本地 notify 不可达时的自愈入口）。
+ */
+function currentReturnUrl(payNo) {
+  const { origin, pathname } = window.location
+  return `${origin}${pathname}?payNo=${encodeURIComponent(payNo)}`
 }
 
 /** 后端是否已切到支付宝沙箱（配置完整可用） */
@@ -52,7 +55,7 @@ function submitFormInNewWindow(form) {
 export async function payWithAlipaySandbox(payNo) {
   let res
   try {
-    res = await alipayCashier(payNo, 'pc', currentReturnUrl())
+    res = await alipayCashier(payNo, 'pc', currentReturnUrl(payNo))
   } catch (e) {
     return { ok: false, message: '支付宝收银台下单失败，请确认沙箱配置' }
   }
@@ -76,4 +79,32 @@ export async function payWithAlipaySandbox(payNo) {
     }
   }
   return { ok: false, message: '等待支付结果超时；若已完成付款，请稍后在支付记录中确认' }
+}
+
+/**
+ * 从收银台跳回后补查一次到账。
+ *
+ * 本地 notify_url 是内网地址，支付宝服务器回调不到；回跳打开的新页面也没有支付上下文。
+ * return_url 上带的 payNo 就是补查入口。查询要重试 —— 沙箱网关会偶发返回空响应。
+ *
+ * @returns {Promise<boolean>} 是否确认入账（true 时调用方刷新列表）
+ */
+export async function settleReturnedPayment() {
+  const payNo = new URLSearchParams(window.location.search).get('payNo')
+  if (!payNo) {
+    return false
+  }
+  window.history.replaceState({}, '', window.location.pathname)
+  for (let i = 0; i < 3; i++) {
+    await sleep(1000)
+    try {
+      const q = await alipayQuery(payNo)
+      if (q?.data?.settled) {
+        return true
+      }
+    } catch (e) {
+      // 网关抖动，继续重试
+    }
+  }
+  return false
 }

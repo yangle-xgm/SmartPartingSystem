@@ -121,7 +121,7 @@ import { useRouter } from 'vue-router'
 import { toastOnce } from '@/utils/request'
 import { showToast, showSuccessToast } from 'vant'
 import { getOrderList, cancelOrder, createPayment, wechatPay, alipayPay } from '@/api/order'
-import { isAlipaySandboxReady, payWithAlipaySandbox } from '@/utils/alipaySandbox'
+import { isAlipaySandboxReady, payWithAlipaySandbox, settleReturnedPayment } from '@/utils/alipaySandbox'
 import { getUserId } from '@/api/user'
 import { displayPlate } from '@/utils/plate'
 import TabBar from '@/components/TabBar.vue'
@@ -201,7 +201,13 @@ function statusTone(o) {
   return 'danger'
 }
 
-onMounted(() => loadData())
+onMounted(async () => {
+  // 从收银台回跳时地址栏带 payNo：先补查一次到账，再加载列表，避免"付了钱仍显示待支付"
+  if (await settleReturnedPayment()) {
+    showSuccessToast('支付成功')
+  }
+  loadData()
+})
 
 async function loadData() {
   refreshing.value = true

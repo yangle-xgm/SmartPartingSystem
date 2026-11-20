@@ -138,7 +138,7 @@ import StatCard from '@/components/StatCard.vue'
 import { getOrderList, exitOrder } from '@/api/order'
 import { getVehicleList } from '@/api/vehicle'
 import { createPayment, wechatPay, alipayPay } from '@/api/payment'
-import { isAlipaySandboxReady, payWithAlipaySandbox } from '@/utils/alipaySandbox'
+import { isAlipaySandboxReady, payWithAlipaySandbox, settleReturnedPayment } from '@/utils/alipaySandbox'
 import { getUserId } from '@/api/user'
 import { displayPlate } from '@/utils/plate'
 
@@ -194,7 +194,13 @@ const tagOf = (o) => {
   return o.payStatus === 1 ? 'success' : 'danger'
 }
 
-onMounted(() => loadData())
+onMounted(async () => {
+  // 从收银台回跳时地址栏带 payNo：先补查一次到账再加载列表，避免"付了钱仍显示待支付"
+  if (await settleReturnedPayment()) {
+    ElMessage.success('支付成功')
+  }
+  loadData()
+})
 
 const loadData = async () => {
   const userId = getUserId()
