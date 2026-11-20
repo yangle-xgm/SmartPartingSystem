@@ -87,6 +87,10 @@ smart-parking:
   # （不办月卡的业主月量级约 450 元，月卡 300 元仍保留价差但不构成惩罚性定价）。
   gate:
     credit-limit-amount: ${SP_GATE_CREDIT_LIMIT:6.00}
+  # 出场后允许的支付窗口（分钟）：到期把应收标为已关闭(3)，但保留"已完成"状态可追缴。
+  # 语义与 payment 的 payment-timeout-minutes（关支付流水）不同，调整时两边建议取同值。
+  order:
+    pay-window-minutes: ${SP_ORDER_PAY_WINDOW_MINUTES:30}
   # 欠费策略：出场后 24h 催缴、48h 记欠费，欠费超限列入车辆黑名单（status=1，入场即拦）
   arrearage:
     remind-after-hours: ${SP_ARREAR_REMIND_HOURS:24}

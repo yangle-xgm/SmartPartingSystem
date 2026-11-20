@@ -80,7 +80,7 @@ management:
 # ============ 自定义配置 ============
 smart-parking:
   # 支付超时补偿：待支付超过该分钟数即触发补偿（演示可调小为 1）
-  payment-timeout-minutes: 30
+  payment-timeout-minutes: ${SP_PAYMENT_TIMEOUT_MINUTES:30}
   # 订单服务地址（内部关单调用）
   order-url: http://localhost:8084
   # 用户服务地址（操作审计）

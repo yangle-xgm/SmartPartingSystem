@@ -4,6 +4,7 @@ import com.smartparking.order.po.ParkingOrder;
 import com.smartparking.order.service.ParkingOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -32,12 +33,23 @@ public class PaymentTimeoutTask {
 
     private final ParkingOrderService parkingOrderService;
 
-    /** 出场后允许的支付窗口（分钟） */
-    private static final long PAY_WINDOW_MINUTES = 30;
+    /**
+     * 出场后允许的支付窗口（分钟）。
+     *
+     * <p>原来是硬编码 {@code 30}，而 payment 侧同名语义的窗口是可配的
+     * （{@code smart-parking.payment-timeout-minutes}），两边调整时极易只改一处：
+     * 订单已关闭但流水还在等，用户点支付会拿到「订单已关闭」——现象看订单不敢看流水，
+     * 排查方向直接跑偏。改成配置项后至少两边都有旋钮。
+     *
+     * <p>语义差异要注意：这里关的是**应收**（order.pay_status=3，状态仍为已完成，
+     * 钱还挂着可追缴）；payment 那边关的是**支付流水**。
+     */
+    @Value("${smart-parking.order.pay-window-minutes:30}")
+    private long payWindowMinutes = 30;
 
     @Scheduled(cron = "0 */5 * * * ?")
     public void checkPaymentTimeout() {
-        LocalDateTime deadline = LocalDateTime.now().minusMinutes(PAY_WINDOW_MINUTES);
+        LocalDateTime deadline = LocalDateTime.now().minusMinutes(payWindowMinutes);
 
         List<ParkingOrder> timeoutOrders = parkingOrderService.lambdaQuery()
                 .eq(ParkingOrder::getStatus, com.smartparking.common.core.constant.Constants.ORDER_STATUS_COMPLETED)
@@ -56,7 +68,7 @@ public class PaymentTimeoutTask {
                 if (parkingOrderService.markPaymentClosed(order.getId())) {
                     closed++;
                     log.info("订单{}出场超过{}分钟未支付，标记为已关闭（应收保留）",
-                            order.getOrderNo(), PAY_WINDOW_MINUTES);
+                            order.getOrderNo(), payWindowMinutes);
                 }
             } catch (Exception e) {
                 log.error("处理订单{}支付超时失败：{}", order.getOrderNo(), e.getMessage(), e);
