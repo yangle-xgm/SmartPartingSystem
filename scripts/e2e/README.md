@@ -9,7 +9,7 @@
 | --- | --- |
 | Docker 容器 | `sp-mysql`、`sp-redis`、`sp-nacos`、`sp-rabbitmq` 已运行（`docker compose up -d`） |
 | 后端服务 | 网关 8080 与 8 个业务服务（8081-8088、8090）健康 |
-| 前端 dev | 管理端 `npm run dev --prefix smart-parking-web`（3000）、业主端 `npm run dev --prefix smart-parking-h5`（5173） |
+| 前端 dev | 管理端 `npm run dev --prefix smart-parking-web`（**3000**）、业主端 `npm run dev --prefix smart-parking-h5`（**3001**） |
 | 浏览器 | 复用本机 Microsoft Edge（`channel: 'msedge'`），**无需** `npx playwright install` |
 
 > 仅跑 API 用例（`npm run test:api`）时不需要前端 dev server。
@@ -49,7 +49,7 @@ npm run report         # 查看 HTML 报告
 | --- | --- | --- |
 | `API_BASE_URL` | `http://localhost:8080` | 网关地址 |
 | `PC_BASE_URL` | `http://localhost:3000` | 管理端地址 |
-| `H5_BASE_URL` | `http://localhost:5173` | 业主端地址 |
+| `H5_BASE_URL` | `http://localhost:3001` | 业主端地址 |
 | `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD` | `admin` / `admin123` | 管理端账号 |
 | `MYSQL_CONTAINER` / `MYSQL_PASSWORD` | `sp-mysql` / `21491879` | SQL 夹具与数据清理 |
 | `REDIS_CONTAINER` | `sp-redis` | 读取验证码 |

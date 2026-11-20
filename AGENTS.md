@@ -43,6 +43,10 @@
 | smart-parking-stats | 8088 | parking_stats | 统计（Redis Sorted Set 实时 + MQ 落库） |
 | smart-parking-ai | 8090 | — | 车牌识别增强（百度 OCR 真实接入，provider=baidu 需配 AK/SK，缺省降级 mock）/ 智能客服（豆包火山方舟真实接入，provider=doubao 需配 API Key + 推理接入点 ep-xxxx ID，缺省/异常降级 mock） |
 | smart-parking-common-* | — | — | core(Result/PageResult/AES/脱敏/异常) / redis / swagger |
+| smart-parking-web（管理端 Vue3+Element Plus） | **3000** | — | PC 管理后台，`vite.config.js` 显式 `server.port` |
+| smart-parking-h5（业主端 Vue3+Vant4） | **3001** | — | 手机 H5，`vite.config.js` 显式 `server.port` |
+
+> **前端端口铁律**：两端都覆盖了 Vite 默认的 `5173`，管理端 = **3000**、业主端 = **3001**。文档、E2E 配置（`scripts/e2e/playwright.config.js` 的 `H5_BASE_URL`）一律按 3001 写，**不要再出现 5173**。两端的 `/api` 都由 vite 在电脑侧代理到 `http://127.0.0.1:8080`（必须写 `127.0.0.1` 而非 `localhost`，Node 18+ 会把 localhost 优先解析成 `::1` 导致偶发 500/超时），并在 `proxyReq` 里摘掉 `Origin` 头——否则手机用局域网 IP 访问时，带上的局域网 Origin 会被网关 CORS 白名单拒绝，返回 **403 且响应体为空**。
 
 > **跨服务数据访问铁律**：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须调对方的 `/internal/**` 接口（实现可用 `RestTemplate` + `InternalHttp` 统一注入 `X-Internal-Token`，也可用 OpenFeign），网关不对外暴露 `/internal/**`。**已发现的唯一违反项**：`stats` 的 `ParkingStatsMapper.xml#selectEntryCountByHour` 直查 `parking_order`，待改为走 order `/internal`（见 `docs/边界确认-2026-11-20.md` §3）。
 

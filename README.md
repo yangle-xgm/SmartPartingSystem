@@ -72,15 +72,36 @@ mvn clean install -DskipTests
 
 ### 6. 启动前端
 
+两端都是 Vite 工程，**端口固定不可互换**，请先起网关 8080（`/api/**` 由 vite 服务端代理转发，前端本身不跨域）。
+
+**管理端（PC）—— 3000**
+
 ```bash
 cd smart-parking-web
 npm install
 npm run dev
 ```
 
-访问 <http://localhost:3000>
+访问 <http://localhost:3000>，默认账号：admin / admin123
 
-默认账号：admin / admin123
+**业主端（H5）—— 3001**
+
+```bash
+cd smart-parking-h5
+npm install
+npm run dev
+```
+
+访问 <http://localhost:3001>，用业主手机号 + 短信验证码登录（开发环境验证码从 Redis `captcha:<key>` 取）。
+
+| 前端 | 端口 | 工程目录 | 配置位置 |
+| --- | --- | --- | --- |
+| 管理端 | **3000** | `smart-parking-web` | `vite.config.js` → `server.port` |
+| 业主端 H5 | **3001** | `smart-parking-h5` | `vite.config.js` → `server.port` |
+
+> **注意 `5173` 是错的**。Vite 的默认端口 5173 在本项目两个工程里都被显式覆盖了（3000 / 3001），旧文档和 `scripts/e2e/playwright.config.js` 里的 5173 默认值会导致 H5 的 UI 用例连不上页面。现已统一改为 3001；跑 E2E 前确认 `netstat -ano | findstr :3001` 有监听。
+>
+> 另注：Grafana 默认也占 3000，与管理端 dev 端口冲突。同时开时把 Grafana 映射到别的端口（`docker-compose.yml` 里改端口映射），或先把管理端 dev 停掉。
 
 ### 7. 访问 API 文档
 
@@ -218,7 +239,9 @@ smart-parking-system/
 | smart-parking-notify   | 8086 |
 | smart-parking-device   | 8087 |
 | smart-parking-stats    | 8088 |
-| smart-parking-web (前端) | 3000 |
+| smart-parking-ai       | 8090 |
+| smart-parking-web (管理端) | 3000 |
+| smart-parking-h5 (业主端)  | 3001 |
 
 ---
 
