@@ -63,8 +63,11 @@ mvn clean install -DskipTests
 | `SP_INTERNAL_TOKEN` | 服务间 `/internal/**` 调用令牌 | `SmartParking-Internal-2026` |
 | `SP_CALLBACK_SECRET` | 支付回调验签密钥，`sign = MD5(payNo + "&" + secret)` | `SmartParkingCallback2026` |
 | `SP_MOCK_PAY_ENABLED` | 模拟支付开关，接真实渠道后必须置 `false` | `true` |
+| `SP_GATE_SIGN_SALT` | 道闸指令签名盐，`sign = MD5(cmd\|deviceNo\|seq\|salt)` | `SmartParkingGateSandbox` |
 
-设 `smart-parking.strict-secrets=true` 即为**生产模式总闸**：上述 5 项任一仍是默认值/空值，服务直接拒绝启动（模拟支付则必须显式置 `false`）。校验分两处——`SecuritySecretsConfig`（公共模块）管 JWT / AES / 内部令牌三项全服务通用的；`PaymentStrictModeGuard`（payment 专属）管回调密钥与 mock 开关，因为这两项只有 payment 配置，放进公共模块会误伤其他服务。
+设 `smart-parking.strict-secrets=true` 即为**生产模式总闸**：上述 6 项任一仍是默认值/空值，服务直接拒绝启动（模拟支付则必须显式置 `false`）。校验分三处——`SecuritySecretsConfig`（公共模块）管 JWT / AES / 内部令牌三项全服务通用的；`PaymentStrictModeGuard`（payment 专属）管回调密钥与 mock 开关；`DeviceStrictModeGuard`（device 专属）管道闸签名盐。后两项只有对应服务才有这些配置，放进公共模块会误伤其他服务。
+
+> **道闸签名盐为什么要单独拎出来**：盐是 `MD5(cmd|deviceNo|seq|salt)` 里唯一的秘密。默认盐写在 `Constants.DEFAULT_GATE_SIGN_SALT` 里、算法也是公开的，拿着设备号和序号就能拼出一条 payload 让闸机抬杆。它原来还是 `GateSigner` 里的 `private static final String`，接真实厂商要么改代码、要么要求厂商接受自研算法；现在换成环境变量即可。strict 模式下仍用默认盐会拒绝启动，非 strict 只 WARN（本地演示没有真实硬件，默认盐是开箱可用的前提）。
 
 > `SP_INTERNAL_TOKEN` 必须在**所有服务和网关**上取同一个值。三处读取它的地方（`InternalApiGuardConfig` 守门器、`SecuritySecretsConfig` 校验、`PaymentRecordServiceImpl` 直连调用）占位符表达式已对齐，统一优先读环境变量。
 
