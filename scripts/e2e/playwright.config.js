@@ -7,14 +7,14 @@ const { defineConfig } = require('@playwright/test');
  * 环境变量：
  *   API_BASE_URL  网关地址（默认 http://localhost:8080）
  *   PC_BASE_URL   管理端地址（默认 http://localhost:3000，vite dev）
- *   H5_BASE_URL   业主端地址（默认 http://localhost:5173，vite dev）
+ *   H5_BASE_URL   业主端地址（默认 http://localhost:3001，vite dev）
  *   E2E_ADMIN_USER / E2E_ADMIN_PASSWORD  管理端账号（默认 admin/admin123）
  *
  * 浏览器：复用本机 Edge（channel: msedge），无需 `playwright install` 下载 Chromium。
  */
 const API_BASE = process.env.API_BASE_URL || 'http://localhost:8080';
 const PC_BASE = process.env.PC_BASE_URL || 'http://localhost:3000';
-const H5_BASE = process.env.H5_BASE_URL || 'http://localhost:5173';
+const H5_BASE = process.env.H5_BASE_URL || 'http://localhost:3001';
 
 module.exports = defineConfig({
   testDir: './tests',

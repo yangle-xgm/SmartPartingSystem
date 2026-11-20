@@ -17,6 +17,21 @@ const OTHER = { username: 'zhaoliu', password: 'user123' };    // 1004 社区2
 /** 张三的月卡车（type=2），带月卡到期时间 */
 const VEHICLE_ID = 4;
 
+/**
+ * 生成未来某个整点时间（`YYYY-MM-DD HH:mm:ss`）。
+ *
+ * 预约接口会拒绝过去时间（5206），用例若写死具体日期，隔天跑就会全红；
+ * 更糟的是「超时长必被拒」这类用例会因过去时间被拒而**假通过**。
+ */
+function futureTime(dayOffset, hour, minute = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + dayOffset);
+  d.setHours(hour, minute, 0, 0);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+    + `${p(d.getHours())}:${p(d.getMinutes())}:00`;
+}
+
 test.describe('月卡充值 · 报价与支付', () => {
   test('按 billing_rule 月租价计价，3 个月为单价的 3 倍', async ({ request }) => {
     const token = await login(request, OWNER);
@@ -235,8 +250,8 @@ test.describe('车位预约 · 归属与身份', () => {
         headers: auth(token),
         params: {
           spaceId,
-          startTime: '2026-11-19 10:00:00',
-          endTime: '2026-11-19 11:00:00',
+          startTime: futureTime(1, 10),
+          endTime: futureTime(1, 11),
         },
       });
       expect((await reserve.json()).code).toBe(200);
@@ -274,8 +289,8 @@ test.describe('车位预约 · 归属与身份', () => {
         params: {
           spaceId,
           userId: 1004,        // 伪造他人身份
-          startTime: '2026-11-19 14:00:00',
-          endTime: '2026-11-19 15:00:00',
+          startTime: futureTime(1, 14),
+          endTime: futureTime(1, 15),
         },
       });
       expect((await reserve.json()).code).toBe(200);
@@ -297,8 +312,8 @@ test.describe('车位预约 · 归属与身份', () => {
         headers: auth(token),
         params: {
           spaceId,
-          startTime: '2026-11-19 16:00:00',
-          endTime: '2026-11-19 19:30:00',
+          startTime: futureTime(1, 16),
+          endTime: futureTime(1, 19, 30),
         },
       });
       const body = await res.json();
