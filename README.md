@@ -250,7 +250,7 @@ smart-parking-system/
 
 ## CI 门禁与 AI 原生 SDLC 规范
 
-本项目已落地 **AI 原生 SDLC（工件驱动闭环）** 的完整工程化骨架：规划(`docs/sdlc/intent.md`) → 设计(`spec.md`) → 构建(`AGENTS.md` + `plan.md`) → 测试(16 个模块 / 55 个测试类 / 216 个用例 + 钩子) → 部署(`.github/workflows/ai-review.yml`) → 维护(`bands.yaml` 监控闭环)。
+本项目已落地 **AI 原生 SDLC（工件驱动闭环）** 的完整工程化骨架：规划(`docs/sdlc/intent.md`) → 设计(`spec.md`) → 构建(`AGENTS.md` + `plan.md`) → 测试(13 个模块 / 63 个测试类 / 256 个用例 + 钩子) → 部署(`.github/workflows/ai-review.yml`) → 维护(`bands.yaml` 监控闭环)。
 
 **第三方渠道**：支付宝走**真实沙箱**（官方 `alipay-sdk-java` + 沙箱网关，支持收银台支付/主动查询/原路退款/异步通知验签，切生产只换网关与密钥）；微信支付无公开沙箱，保持模拟通道。设备侧以 `GateAdapter` 抽象厂商协议，内置 `sandbox`（JSON 指令 + ACK 回执 + 虚拟道闸模拟器）与 `mqtt-plain` 两种通道，接入真实厂商只需新增一个适配器 Bean。详见 `docs/沙箱渠道接入-支付宝与设备-2026-11-19.md`。
 

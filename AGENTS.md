@@ -9,7 +9,7 @@
 ## 1. 项目身份（Project Identity）
 
 - **名称**：小区智慧停车管理系统（SmartPartingSystem）
-- **形态**：Spring Cloud 微服务单体仓库（多模块 Maven 聚合工程），含后端 12 个模块 + 前端 `smart-parking-web` + H5 `smart-parking-h5`
+- **形态**：Spring Cloud 微服务单体仓库（多模块 Maven 聚合工程），后端 **13 个可构建模块**（10 个服务 + 3 个 common 子模块）+ 前端 `smart-parking-web` + H5 `smart-parking-h5`
 - **JDK**：17 ｜ **构建**：Maven 3.9+ ｜ **目标**：`mvn clean install` 全量通过 + `mvn test` 全量通过
 
 ## 2. 技术栈（ authoritative，改版本需先改 plan.md）
@@ -48,7 +48,7 @@
 
 > **前端端口铁律**：两端都覆盖了 Vite 默认的 `5173`，管理端 = **3000**、业主端 = **3001**。文档、E2E 配置（`scripts/e2e/playwright.config.js` 的 `H5_BASE_URL`）一律按 3001 写，**不要再出现 5173**。两端的 `/api` 都由 vite 在电脑侧代理到 `http://127.0.0.1:8080`（必须写 `127.0.0.1` 而非 `localhost`，Node 18+ 会把 localhost 优先解析成 `::1` 导致偶发 500/超时），并在 `proxyReq` 里摘掉 `Origin` 头——否则手机用局域网 IP 访问时，带上的局域网 Origin 会被网关 CORS 白名单拒绝，返回 **403 且响应体为空**。
 
-> **跨服务数据访问铁律**：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须调对方的 `/internal/**` 接口（实现可用 `RestTemplate` + `InternalHttp` 统一注入 `X-Internal-Token`，也可用 OpenFeign），网关不对外暴露 `/internal/**`。**已发现的唯一违反项**：`stats` 的 `ParkingStatsMapper.xml#selectEntryCountByHour` 直查 `parking_order`，待改为走 order `/internal`（见 `docs/边界确认-2026-11-20.md` §3）。
+> **跨服务数据访问铁律**：服务只能通过自己的 Mapper 访问自己 owns 的表；跨服务取数必须调对方的 `/internal/**` 接口（实现可用 `RestTemplate` + `InternalHttp` 统一注入 `X-Internal-Token`，也可用 OpenFeign），网关不对外暴露 `/internal/**`。**当前零越界**：`stats` 原先直查 `parking_order` 的 `selectEntryCountByHour` 已改为调 order `GET /internal/entry-count-by-hour`（见 `docs/边界确认-2026-11-20.md` §3、`docs/internal-api-contracts.md` #30）。
 
 ## 4. 不可破坏的架构契约（Do-Not-Break）
 
@@ -105,7 +105,7 @@ mvn -B -pl smart-parking-order -am test -DfailIfNoTests=false
 
 > 最近评估：2026-10-13。构建已全绿、CI 已激活、`bands.yaml` 骨架已落地；以下为**仍待解决**的真实缺口（勿与已关闭项混淆）。
 
-- 🟢 **测试基线已成型（2026-11-20 复测）**：16 个模块全绿，共 **55 个测试类 / 218 个用例**（common-core 28、gateway 11、user 17、parking 13、vehicle 19、order 49、payment 26、notify 17、device 17、stats 6、ai 15）。11 个业务模块各有 `*InternalApiContractTest` 守 `/internal` 契约；计费测试已从"镜像式"（在测试里重写一份公式）改为**反射直调生产 `calculateBillingAmount`**。日封顶口径已按需求方确认改为**自然日**（00:00 分界，逐日重置额度、逐日判周末费率），回归用例锁定：24h30m 跨日 = 60.00（非封顶 200）、20h 跨两天封顶 30 = 40.00、48h 封顶 30 = 80.00、跨周末 48h = 220.00。支付宝沙箱接入后新增两组闸门测试：`AlipaySettleAmountGuardTest`（渠道金额与应付不一致一律拒绝入账，5 例）、`GateSandboxTest`（道闸指令签名/ACK 回执/厂商回落，6 例）。仍缺：JaCoCo 覆盖率硬门槛、`@SpringBootTest` 全链路集成测试。
+- 🟢 **测试基线已成型（2026-11-21 复测）**：13 个模块全绿，共 **63 个测试类 / 256 个用例**（common-core 32、gateway 11、user 17、parking 13、vehicle 23、order 50、payment 53、notify 17、device 19、stats 6、ai 15）。11 个业务模块各有 `*InternalApiContractTest` 守 `/internal` 契约；计费测试已从"镜像式"（在测试里重写一份公式）改为**反射直调生产 `calculateBillingAmount`**。日封顶口径已按需求方确认改为**自然日**（00:00 分界，逐日重置额度、逐日判周末费率），回归用例锁定：24h30m 跨日 = 60.00（非封顶 200）、20h 跨两天封顶 30 = 40.00、48h 封顶 30 = 80.00、跨周末 48h = 220.00。支付宝沙箱接入后新增两组闸门测试：`AlipaySettleAmountGuardTest`（渠道金额与应付不一致一律拒绝入账，5 例）、`GateSandboxTest`（道闸指令签名/ACK 回执/厂商回落，6 例）。仍缺：JaCoCo 覆盖率硬门槛、`@SpringBootTest` 全链路集成测试。
 - 🟢 **支付/设备渠道已沙箱化（2026-11-19）**：
   - **支付宝走真实沙箱**：`alipay-sdk-java:4.40.560.ALL` + 沙箱网关，`AlipaySandboxService` 提供 precreate / page-pay / wap-pay / trade.query / trade.refund / notify 验签；`AlipaySandboxController` 暴露 `POST /api/payment/alipay/{precreate,cashier,query}` 与 `POST /api/payment/callback/alipay/notify`（后者已在网关白名单内，靠验签+app_id+金额三重校验）。`settleFromChannel` 强制渠道金额与本地应付一致（`compareTo`），不一致拒绝入账。`smart-parking.alipay.enabled=true` 时模拟端点 `/alipay/pay` 自动关闭，避免并存绕过。**配置变量**：`SP_ALIPAY_ENABLED / SP_ALIPAY_APP_ID / SP_ALIPAY_PRIVATE_KEY / SP_ALIPAY_PUBLIC_KEY`（注意 `alipay-public-key` 是支付宝公钥，不是应用公钥）。本地无公网回调时用 `alipay/query` 主动查询闭环。**微信无公开沙箱**，保持模拟。
   - **设备厂商通道可插拔**：`device` 新增 `vendor` 列（`V4__device_vendor.sql`，默认 `sandbox`）+ `GateAdapter` 抽象 + `GateAdapterFactory` 按设备厂商路由。内置 `SandboxGateAdapter`（JSON 指令 + `sign=MD5(cmd|deviceNo|seq|salt)` + `/ack` 回执等待）与 `MqttPlainGateAdapter`（兼容老版纯文本 OPEN/CLOSE）；`SandboxGateSimulator` 是虚拟道闸，校验签名后回执，无硬件也能跑通"下发→执行→回执"。接入真实厂商只需新增一个 `GateAdapter` Bean 并改 `device.vendor`，业务代码零改动。**开关**：`smart-parking.device.gate-vendor`(默认 sandbox)、`gate-ack-timeout-ms`(1500)、`strict-ack`(默认 false —— 大多数道闸不回 ACK，严格模式会堵车)、`simulator.enabled`(默认 true)、**`gate-sign-salt`**（`SP_GATE_SIGN_SALT`，指令签名盐，默认 `SmartParkingGateSandbox`；strict 模式下仍用默认值由 `DeviceStrictModeGuard` 拒绝启动）。指令流水：`GET /api/device/gate/command-log`，每条含 `reason` 字段（直接区分「支付成功放行」与「手动开闸」，不用再解 payload 字符串）。
