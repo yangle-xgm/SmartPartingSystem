@@ -137,6 +137,9 @@
             <el-tag size="small" :type="row.action === 'OPEN' ? 'success' : 'info'">{{ row.action }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="放行原因" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.reason || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="transport" label="通道" width="100" />
         <el-table-column label="回执" width="100">
           <template #default="{ row }">
